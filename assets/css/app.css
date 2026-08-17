@@ -1,0 +1,802 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   BEEROCRACY — the weekly ballot
+
+   The whole interface is one municipal ballot sheet: manila stock on a dark
+   table, printed in ink, marked with rubber stamps. Bottle green is the voice
+   of officialdom, oxide red is a rejection, pilsner gold is the beer itself.
+   Nothing else gets to be colourful.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+@import "tailwindcss" source(none);
+@source "../css";
+@source "../js";
+@source "../../lib/beerocracy_web";
+
+@plugin "../vendor/heroicons";
+
+/* Add variants based on LiveView classes */
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session],
+[data-phx-teleported-src] {
+  display: contents;
+}
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 300 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url("/fonts/archivo-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Space Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/space-mono-400-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Space Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/space-mono-700-latin.woff2") format("woff2");
+}
+
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-desk: #16211a;
+  --color-desk-deep: #0d1511;
+  --color-paper: #f0e7d3;
+  --color-card: #f8f1e2;
+  --color-paper-edge: #d8c8a3;
+  --color-rule: #c6b48f;
+  --color-ink: #171310;
+  --color-ink-soft: #6b5f50;
+  --color-bottle: #2a4a37;
+  --color-bottle-deep: #1c3325;
+  --color-gold: #b8850f;
+  --color-oxide: #a63527;
+
+  --color-accent-amber: #b8850f;
+  --color-accent-copper: #9c5a2c;
+  --color-accent-gold: #c9a227;
+  --color-accent-rust: #a6432b;
+  --color-accent-moss: #4b6b3a;
+  --color-accent-plum: #6b4160;
+  --color-accent-slate: #47586b;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Everything below is sized in rem, so nudging the root size scales the
+       whole sheet — type, padding and rules together — rather than leaving a
+       phone-sized column stranded in the middle of a desktop monitor. */
+    font-size: 100%;
+  }
+
+  @media (width >= 48rem) {
+    html {
+      font-size: 109%;
+    }
+  }
+
+  @media (width >= 80rem) {
+    html {
+      font-size: 118%;
+    }
+  }
+
+  body {
+    background-color: var(--color-desk-deep);
+    /* The table under the sheet: dark, lightly grained. */
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% 0%, var(--color-desk), transparent 70%),
+      repeating-linear-gradient(
+        92deg,
+        rgb(255 255 255 / 0.014) 0 2px,
+        transparent 2px 7px
+      );
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background-color: var(--color-gold);
+    color: var(--color-card);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* ── The sheet ──────────────────────────────────────────────────────────── */
+
+  .sheet {
+    position: relative;
+    width: 100%;
+    max-width: 52rem;
+    margin-inline: auto;
+    background-color: var(--color-paper);
+    /* Faint fibre in the stock, so it reads as paper rather than a beige div. */
+    background-image:
+      repeating-linear-gradient(0deg, rgb(23 19 16 / 0.016) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgb(23 19 16 / 0.012) 0 1px, transparent 1px 4px);
+    box-shadow:
+      0 1px 0 var(--color-paper-edge),
+      0 24px 60px -20px rgb(0 0 0 / 0.7);
+  }
+
+  /* Tear-off perforation along the top edge of the sheet. */
+  .sheet-perforation {
+    height: 0.75rem;
+    background-image: radial-gradient(
+      circle at 50% 0,
+      transparent 0.375rem,
+      var(--color-paper) 0.385rem
+    );
+    background-size: 1.125rem 0.75rem;
+    background-repeat: repeat-x;
+  }
+
+  .sheet-section {
+    padding: 1.75rem 1.25rem;
+    border-top: 1px dashed var(--color-rule);
+  }
+
+  .sheet-section:first-of-type {
+    border-top: 0;
+  }
+
+  @media (width >= 40rem) {
+    .sheet-section {
+      padding: 2.25rem 2.5rem;
+    }
+  }
+
+  /* A section still waiting on the one before it. Visible, so you can see what
+     you are signing up for, but nothing in it responds yet. */
+  .sheet-section[data-locked] {
+    opacity: 0.4;
+    filter: saturate(0.4);
+    pointer-events: none;
+  }
+
+  /* ── Typography ─────────────────────────────────────────────────────────── */
+
+  .wordmark {
+    font-weight: 900;
+    font-stretch: 78%;
+    letter-spacing: -0.02em;
+    line-height: 0.86;
+    text-transform: uppercase;
+    font-size: clamp(2rem, 9vw, 3.25rem);
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .section-heading {
+    font-weight: 800;
+    font-stretch: 82%;
+    text-transform: uppercase;
+    letter-spacing: -0.005em;
+    line-height: 1;
+    font-size: clamp(1.375rem, 5.5vw, 1.875rem);
+  }
+
+  .article-no {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    color: var(--color-oxide);
+  }
+
+  .note {
+    color: var(--color-ink-soft);
+    font-size: 1rem;
+    line-height: 1.55;
+    max-width: 58ch;
+  }
+
+  .data {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Rubber stamps ──────────────────────────────────────────────────────── */
+
+  .stamp {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.4rem 0.85rem;
+    border: 2px solid currentColor;
+    box-shadow: inset 0 0 0 1px currentColor;
+    border-radius: 0.2rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    line-height: 1.1;
+    /* Ink never sits perfectly flat on paper. */
+    opacity: 0.88;
+  }
+
+  .stamp-week {
+    color: var(--color-oxide);
+    transform: rotate(-5deg);
+  }
+
+  .stamp-verdict {
+    position: absolute;
+    top: 1.75rem;
+    padding: 0.5rem 1.1rem;
+    font-size: clamp(1.125rem, 5vw, 1.5rem);
+    letter-spacing: 0.18em;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .stamp-approve {
+    left: 1.25rem;
+    color: var(--color-bottle);
+    transform: rotate(-13deg);
+  }
+
+  .stamp-reject {
+    right: 1.25rem;
+    color: var(--color-oxide);
+    transform: rotate(13deg);
+  }
+
+  /* ── Controls ───────────────────────────────────────────────────────────── */
+
+  .field {
+    width: 100%;
+    background-color: transparent;
+    border: 0;
+    border-bottom: 2px solid var(--color-ink);
+    padding: 0.5rem 0.25rem;
+    font-family: var(--font-mono);
+    font-size: 1.0625rem;
+    color: var(--color-ink);
+  }
+
+  .field::placeholder {
+    color: var(--color-ink-soft);
+    opacity: 0.7;
+  }
+
+  .field:focus {
+    outline: 0;
+    border-bottom-color: var(--color-gold);
+    background-color: rgb(184 133 15 / 0.07);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.25rem;
+    border: 2px solid var(--color-ink);
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition:
+      transform 120ms ease,
+      box-shadow 120ms ease,
+      background-color 120ms ease;
+    box-shadow: 3px 3px 0 var(--color-paper-edge);
+  }
+
+  .btn:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--color-paper-edge);
+  }
+
+  .btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--color-paper-edge);
+  }
+
+  .btn:disabled {
+    cursor: default;
+    opacity: 0.35;
+    transform: none;
+    box-shadow: 3px 3px 0 var(--color-paper-edge);
+  }
+
+  .btn-approve {
+    background-color: var(--color-bottle);
+    border-color: var(--color-bottle);
+  }
+
+  .btn-reject {
+    background-color: var(--color-oxide);
+    border-color: var(--color-oxide);
+  }
+
+  .btn-quiet {
+    background-color: transparent;
+    color: var(--color-ink);
+  }
+
+  .btn-quiet:hover {
+    background-color: rgb(23 19 16 / 0.06);
+  }
+
+  /* ── Weekday tiles ──────────────────────────────────────────────────────── */
+
+  .day-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.75rem 0.25rem 0.6rem;
+    background-color: var(--color-card);
+    border: 2px solid var(--color-ink);
+    cursor: pointer;
+    transition:
+      background-color 120ms ease,
+      transform 120ms ease;
+  }
+
+  .day-tile:hover:not(:disabled) {
+    transform: translateY(-2px);
+  }
+
+  .day-tile:disabled {
+    cursor: default;
+  }
+
+  /* Yes is a filled tile; maybe is the same commitment drawn in pencil. */
+  .day-tile[data-stance="yes"] {
+    background-color: var(--color-bottle);
+    color: var(--color-paper);
+    border-color: var(--color-bottle-deep);
+  }
+
+  .day-tile[data-stance="maybe"] {
+    color: var(--color-ink);
+    border-color: var(--color-gold);
+    background-color: var(--color-card);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(184 133 15 / 0.3) 0 4px,
+      transparent 4px 9px
+    );
+  }
+
+  /* The outlook, printed above the day like a weather column in a newspaper.
+     Always occupies its line, forecast or not, so the five tiles stay level. */
+  .day-tile-weather {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    /* Holds its height with or without a forecast, so the five tiles stay
+       level even when the API has no answer for one of the days. */
+    min-height: 4.75rem;
+    line-height: 1;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.1rem;
+    border-bottom: 1px solid currentColor;
+    width: 100%;
+  }
+
+  .day-tile-sky {
+    font-size: clamp(1.375rem, 6.5vw, 2rem);
+    line-height: 1;
+  }
+
+  .day-tile-temp {
+    font-family: var(--font-mono);
+    font-size: clamp(0.8125rem, 3.6vw, 1.0625rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  /* The verdict. Wraps to two lines on a narrow phone rather than being
+     truncated — the whole point is that it can be read at a glance. */
+  .day-tile-rain {
+    display: block;
+    /* The verdict is a different kind of fact from the temperature above it, so
+       it gets a little air rather than sitting in the same tight stack. */
+    margin-top: 0.25rem;
+    font-family: var(--font-mono);
+    font-size: clamp(0.5625rem, 2.5vw, 0.6875rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    text-align: center;
+    text-wrap: balance;
+    opacity: 0.7;
+  }
+
+  /* Dry and a spit stay quiet; actual rain earns the rejection colour. */
+  .day-tile-rain[data-level="2"] {
+    opacity: 1;
+  }
+
+  .day-tile-rain[data-level="3"],
+  .day-tile-rain[data-level="4"] {
+    color: var(--color-oxide);
+    font-weight: 700;
+    opacity: 1;
+  }
+
+  .day-tile[data-stance="yes"] .day-tile-rain[data-level="3"],
+  .day-tile[data-stance="yes"] .day-tile-rain[data-level="4"] {
+    color: var(--color-paper);
+  }
+
+  .day-tile-label {
+    font-weight: 900;
+    font-stretch: 74%;
+    font-size: clamp(1.125rem, 5vw, 1.5rem);
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .day-tile-date {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    opacity: 0.7;
+  }
+
+  /* The voter's own answer, spelled out so the three states are never a guess. */
+  .day-tile-stance {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.1rem 0.35rem;
+    border: 1px solid currentColor;
+    opacity: 0.85;
+  }
+
+  .day-tile[data-stance="maybe"] .day-tile-stance {
+    color: var(--color-gold);
+    background-color: var(--color-card);
+    opacity: 1;
+  }
+
+  .day-tile:not([data-stance]) .day-tile-stance {
+    border-color: transparent;
+    opacity: 0.4;
+  }
+
+  .day-tile-count {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    border-top: 1px solid currentColor;
+    padding-top: 0.3rem;
+    width: 100%;
+    text-align: center;
+    opacity: 0.75;
+  }
+
+  /* The leading day gets a printed corner flag rather than another colour. */
+  .day-tile[data-leader]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    border-width: 0 0.7rem 0.7rem 0;
+    border-style: solid;
+    border-color: transparent var(--color-gold) transparent transparent;
+  }
+
+  /* ── The deck ───────────────────────────────────────────────────────────── */
+
+  /* One grid cell holding every card, so the deck is exactly as tall as its
+     tallest card and the sheet never jumps as cards are dealt away. */
+  .deck {
+    display: grid;
+    grid-template-columns: 1fr;
+    /* A card is held in one hand; it should not stretch across a monitor just
+       because there is room. */
+    max-width: 30rem;
+    margin-inline: auto;
+    touch-action: pan-y;
+  }
+
+  .swipe-card {
+    grid-area: 1 / 1;
+    position: relative;
+    background-color: var(--color-card);
+    border: 2px solid var(--color-ink);
+    box-shadow: 0 10px 24px -14px rgb(0 0 0 / 0.55);
+    user-select: none;
+    -webkit-user-select: none;
+    transform: translate3d(0, 0, 0);
+    /* Cards promoted up the stack should rise, not teleport. Dragging opts out
+       below so the card tracks the thumb exactly. */
+    transition: transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+
+  .swipe-card[data-depth="0"] {
+    z-index: 3;
+    cursor: grab;
+  }
+
+  .swipe-card[data-depth="0"]:active {
+    cursor: grabbing;
+  }
+
+  /* The cards waiting underneath, fanned just enough to read as a stack. */
+  .swipe-card[data-depth="1"] {
+    z-index: 2;
+    transform: translate3d(0, 0.6rem, 0) scale(0.965);
+  }
+
+  .swipe-card[data-depth="2"] {
+    z-index: 1;
+    transform: translate3d(0, 1.2rem, 0) scale(0.93);
+  }
+
+  .swipe-card[data-depth="1"],
+  .swipe-card[data-depth="2"] {
+    pointer-events: none;
+  }
+
+  .swipe-card[data-dragging] {
+    transition: none;
+  }
+
+  .swipe-card[data-settling] {
+    transition: transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+
+  .swipe-card[data-flying] {
+    transition:
+      transform 320ms cubic-bezier(0.4, 0, 0.9, 0.4),
+      opacity 320ms ease-in;
+    opacity: 0;
+  }
+
+  .card-band {
+    height: 0.5rem;
+    background-color: var(--band, var(--color-accent-amber));
+  }
+
+  .meter {
+    display: inline-flex;
+    gap: 0.2rem;
+  }
+
+  .meter-pip {
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 1.5px solid var(--color-ink);
+  }
+
+  .meter-pip[data-filled] {
+    background-color: var(--band, var(--color-gold));
+  }
+
+  /* ── The register ───────────────────────────────────────────────────────── */
+
+  /* An entry at rest: the same stock as a swipe card, but it sits still and is
+     never going anywhere. */
+  .entry {
+    background-color: var(--color-card);
+    border: 2px solid var(--color-ink);
+    box-shadow: 3px 3px 0 var(--color-paper-edge);
+  }
+
+  .sort-link {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--color-rule);
+    color: var(--color-ink-soft);
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+
+  .sort-link:hover {
+    color: var(--color-ink);
+    background-color: rgb(23 19 16 / 0.05);
+  }
+
+  .sort-link[aria-current="true"] {
+    background-color: var(--color-ink);
+    border-color: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  /* A place we were at last week wears its history loudly — that is the whole
+     point of showing it. */
+  .chip[data-recent] {
+    border-color: var(--color-oxide);
+    color: var(--color-oxide);
+    font-weight: 700;
+  }
+
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--color-rule);
+    color: var(--color-ink-soft);
+  }
+
+  /* ── The rules table ────────────────────────────────────────────────────── */
+
+  .rules-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    min-width: 30rem;
+  }
+
+  .rules-table th,
+  .rules-table td {
+    padding: 0.5rem 0.6rem;
+    text-align: center;
+    border: 1px solid var(--color-rule);
+    white-space: nowrap;
+  }
+
+  .rules-table thead th,
+  .rules-table tbody th {
+    background-color: var(--color-paper-edge);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  /* Same colour ladder the tiles use, so the table reads as the legend it is. */
+  .rules-table [data-level="0"],
+  .rules-table [data-level="1"] {
+    color: var(--color-ink-soft);
+  }
+
+  .rules-table [data-level="3"],
+  .rules-table [data-level="4"] {
+    color: var(--color-oxide);
+    font-weight: 700;
+  }
+
+  /* ── Tally ──────────────────────────────────────────────────────────────── */
+
+  .tally-bar {
+    display: flex;
+    height: 0.625rem;
+    background-color: var(--color-paper-edge);
+    overflow: hidden;
+  }
+
+  .tally-fill {
+    height: 100%;
+    background-color: var(--color-bottle);
+    transition: width 420ms cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+
+  /* Maybes are hatched, so a day propped up by them reads as provisional. */
+  .tally-fill[data-tentative] {
+    background-color: var(--color-card);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--color-gold) 0 3px,
+      transparent 3px 7px
+    );
+  }
+
+  .rank-row {
+    display: grid;
+    grid-template-columns: 1.75rem 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding-block: 0.6rem;
+    border-top: 1px solid var(--color-rule);
+  }
+
+  .rank-no {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--color-ink-soft);
+  }
+}
+
+@layer utilities {
+  /* Visible to a screen reader, invisible on the page — the weather symbol is
+     an emoji, so the words have to be carried separately. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  /* Rubber stamps land: oversized, rotated, then settle. */
+  @keyframes stamp-down {
+    0% {
+      opacity: 0;
+      transform: rotate(-16deg) scale(2.1);
+    }
+    55% {
+      opacity: 0.95;
+      transform: rotate(-3deg) scale(0.94);
+    }
+    100% {
+      opacity: 0.88;
+      transform: rotate(-5deg) scale(1);
+    }
+  }
+
+  .animate-stamp {
+    animation: stamp-down 480ms cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  }
+
+  @keyframes sheet-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .animate-sheet {
+    animation: sheet-in 420ms ease-out both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

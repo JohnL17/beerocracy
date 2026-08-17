@@ -1,0 +1,123 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Only one build per branch; a newer push makes the one in flight pointless.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ELIXIR_VERSION: "1.20.3"
+  OTP_VERSION: "28.5.0.5"
+  REGISTRY: ghcr.io
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+
+    # Everything here runs in the test environment. Letting the format and
+    # compile steps default to :dev would build all 51 dependencies a second
+    # time, in a second _build directory, for no benefit — that alone was over
+    # a minute of the run.
+    env:
+      MIX_ENV: test
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Cache the hex package downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.hex
+            ~/.mix
+          key: hex-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ hashFiles('mix.lock') }}
+          restore-keys: hex-${{ runner.os }}-${{ env.OTP_VERSION }}-
+
+      # The key ends in the commit sha so every run writes a fresh cache;
+      # `actions/cache` never overwrites an existing key, so a key that only
+      # hashed mix.lock would freeze _build at whatever the first run produced
+      # and recompile the application from scratch every time after that.
+      - name: Cache deps and build
+        uses: actions/cache@v6
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('mix.lock') }}-${{ github.sha }}
+          restore-keys: |
+            mix-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('mix.lock') }}-
+            mix-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-
+
+      - run: mix deps.get
+
+      - name: Compile without warnings
+        run: mix compile --warnings-as-errors
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Check for unused dependencies
+        run: mix deps.unlock --check-unused
+
+      # The catalogue is edited by hand in pull requests, so a typo in it has to
+      # fail here rather than at somebody's first request after a deploy.
+      - name: Validate the places catalogue
+        run: mix beerocracy.check_places
+
+      - run: mix test
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    needs: test
+    # Pull requests get built for the test above; only main gets published.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to the container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      # Layer cache lives beside the image in the registry rather than in the
+      # Actions cache: no 10 GB budget to compete over, and pushing the builder
+      # stage — which holds the compiled dependencies — is markedly quicker.
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}:buildcache,mode=max
