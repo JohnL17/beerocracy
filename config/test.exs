@@ -25,9 +25,11 @@ config :beerocracy, admins: []
 # Run `mix help test` for more information.
 config :beerocracy, Beerocracy.Repo,
   database: Path.expand("../beerocracy_test.db", __DIR__),
-  pool_size: 5,
-  # SQLite lets one writer in at a time, and a test with several LiveViews on
-  # the sheet has several. Same reasoning as production, same timeout.
+  # One connection, deliberately. SQLite takes a single writer, and a test with
+  # several LiveViews on the sheet has several processes writing at once — with
+  # a larger pool they race for the write lock and lose as "Database busy"
+  # rather than queueing. The timeout is the same belt-and-braces as production.
+  pool_size: 1,
   busy_timeout: 5_000,
   pool: Ecto.Adapters.SQL.Sandbox
 

@@ -11,6 +11,8 @@ defmodule Beerocracy.Ballot do
   alongside it purely so the tally can be read back from the votes alone.
   """
 
+  alias Beerocracy.Minutes
+  alias Beerocracy.Minutes.Entry
   alias Beerocracy.Places
   alias Beerocracy.Places.Place
   alias Beerocracy.Voting
@@ -430,16 +432,27 @@ defmodule Beerocracy.Ballot do
   end
 
   defmodule Visit do
-    @moduledoc "Where a past week ended up."
-    defstruct [:week, :weekday, :date, :place, :likes]
+    @moduledoc """
+    Where a week ended up.
+
+    Usually worked out from the votes. When `recorded_by` is set, an admin has
+    said otherwise and this is where we actually went — `likes` then reports how
+    that place did in the vote it did not win, which is often the point.
+    """
+    defstruct [:week, :weekday, :date, :place, :likes, :recorded_by]
 
     @type t :: %__MODULE__{
             week: Week.t(),
             weekday: atom(),
             date: Date.t(),
             place: Place.t(),
-            likes: non_neg_integer()
+            likes: non_neg_integer(),
+            recorded_by: String.t() | nil
           }
+
+    @doc "Whether this is an admin's correction rather than the vote's answer."
+    @spec recorded?(t()) :: boolean()
+    def recorded?(%__MODULE__{recorded_by: recorded_by}), do: not is_nil(recorded_by)
   end
 
   @doc """
@@ -451,12 +464,39 @@ defmodule Beerocracy.Ballot do
   """
   @spec history(Week.t(), pos_integer()) :: [Visit.t()]
   def history(%Week{} = before, limit \\ 8) do
-    Voting.all_place_votes!()
-    |> Enum.group_by(& &1.week_key)
-    |> Map.delete(before.key)
-    |> Enum.sort_by(&elem(&1, 0), :desc)
-    |> Enum.flat_map(&visit(&1, before))
+    recorded = Minutes.by_week()
+    voted = Voting.all_place_votes!() |> Enum.group_by(& &1.week_key)
+
+    # A week can appear because it was voted on, because somebody wrote down
+    # where we went, or both — a night out that nobody voted on at all is still
+    # a night we were there, and the deck should know about it.
+    voted
+    |> Map.keys()
+    |> Enum.concat(Map.keys(recorded))
+    |> Enum.uniq()
+    |> Enum.reject(&(&1 == before.key))
+    |> Enum.sort(:desc)
+    |> Enum.flat_map(&visit(&1, Map.get(voted, &1, []), Map.get(recorded, &1), before))
     |> Enum.take(limit)
+  end
+
+  @doc """
+  Where an admin says we actually went this week, or `nil` for the usual case.
+
+  Kept apart from `outcome/1` on purpose: the outcome is what the ballot says,
+  and it stays available and honest even once it has been overruled.
+  """
+  @spec recorded_visit(Week.t()) :: Visit.t() | nil
+  def recorded_visit(%Week{} = week) do
+    case Minutes.for_week(week) do
+      nil ->
+        nil
+
+      entry ->
+        week
+        |> visit_for(Voting.place_votes_for_week!(week.key), entry)
+        |> List.first()
+    end
   end
 
   @doc """
@@ -478,9 +518,36 @@ defmodule Beerocracy.Ballot do
     later |> Date.diff(earlier) |> div(7)
   end
 
-  defp visit({week_key, votes}, before) do
-    with {:ok, week} <- week_from_key(week_key, before),
-         tally = tally_from(week, votes),
+  defp visit(week_key, votes, entry, before) do
+    case week_from_key(week_key, before) do
+      {:ok, week} -> visit_for(week, votes, entry)
+      :error -> []
+    end
+  end
+
+  # An admin saying where we went beats the vote outright — that is the whole
+  # point of writing it down.
+  defp visit_for(week, votes, %Entry{} = entry) do
+    case Places.fetch(entry.place_slug) do
+      {:ok, place} ->
+        [
+          %Visit{
+            week: week,
+            weekday: entry.weekday,
+            date: Week.date_of(week, entry.weekday),
+            place: place,
+            likes: likes_for(week, votes, entry.place_slug),
+            recorded_by: entry.recorded_by
+          }
+        ]
+
+      :error ->
+        []
+    end
+  end
+
+  defp visit_for(week, votes, nil) do
+    with tally = tally_from(week, votes),
          %{day: day, places: [%PlaceResult{} = result | _]} <- outcome(tally) do
       [
         %Visit{
@@ -496,9 +563,28 @@ defmodule Beerocracy.Ballot do
     end
   end
 
-  # The week key is all that is stored, so walk back from the current week to
-  # find the Monday it belongs to rather than trying to invert the ISO calendar.
-  defp week_from_key(week_key, %Week{} = reference) do
+  # How the place we actually went to did in the vote it may well have lost.
+  defp likes_for(week, votes, slug) do
+    week
+    |> tally_from(votes)
+    |> Map.fetch!(:places)
+    |> Enum.find(&(&1.place.slug == slug))
+    |> case do
+      nil -> 0
+      result -> result.likes
+    end
+  end
+
+  @doc """
+  The week a stored key belongs to, searched back from a reference week.
+
+  The key is all that is stored, so this walks backwards from a week we do hold
+  a date for rather than trying to invert the ISO calendar. Returns `:error` for
+  a key outside the last two years, which is also what makes it safe to hand a
+  week key straight from a form.
+  """
+  @spec week_from_key(String.t(), Week.t()) :: {:ok, Week.t()} | :error
+  def week_from_key(week_key, %Week{} = reference) do
     Enum.find_value(0..104, fn weeks_ago ->
       week = Week.from_date(Date.add(reference.monday, -7 * weeks_ago))
       if week.key == week_key, do: {:ok, week}

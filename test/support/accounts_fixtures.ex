@@ -18,13 +18,18 @@ defmodule Beerocracy.AccountsFixtures do
   @spec user(keyword()) :: User.t()
   def user(attrs \\ []) do
     unique = System.unique_integer([:positive])
-    login = Keyword.get(attrs, :login, "voter-#{unique}")
+    login = Keyword.get(attrs, :login) || default_login(Keyword.get(attrs, :name), unique)
+
+    # Derived from the handle rather than generated, so the same voter is dealt
+    # the same deck on every run — the shuffle is seeded on the voter key, and a
+    # random one would make any test that names a card flake.
+    github_id = attrs |> Keyword.get(:github_id, :erlang.phash2(login)) |> to_string()
 
     # Exactly what `Assent.Strategy.Github.normalize/2` produces — the raw
     # GitHub body never reaches the action, and a fixture shaped like one only
     # proves the tests and the bug agree.
     user_info = %{
-      "sub" => attrs |> Keyword.get(:github_id, unique) |> to_string(),
+      "sub" => github_id,
       "preferred_username" => login,
       "name" => Keyword.get(attrs, :name),
       "email" => Keyword.get(attrs, :email),
@@ -37,5 +42,13 @@ defmodule Beerocracy.AccountsFixtures do
       action: :register_with_github,
       authorize?: false
     )
+  end
+
+  # A voter asked for by name gets a handle made from it, so "Jonas" is the same
+  # person in every test that mentions him.
+  defp default_login(nil, unique), do: "voter-#{unique}"
+
+  defp default_login(name, _unique) do
+    name |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "-")
   end
 end

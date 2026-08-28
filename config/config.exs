@@ -9,7 +9,7 @@ import Config
 
 config :beerocracy,
   ecto_repos: [Beerocracy.Repo],
-  ash_domains: [Beerocracy.Voting, Beerocracy.Accounts],
+  ash_domains: [Beerocracy.Voting, Beerocracy.Accounts, Beerocracy.Minutes],
   generators: [timestamp_type: :utc_datetime]
 
 # The catalogue of drinking establishments lives in a YAML file so that adding a

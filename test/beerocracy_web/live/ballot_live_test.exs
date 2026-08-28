@@ -206,8 +206,8 @@ defmodule BeerocracyWeb.BallotLiveTest do
       {:ok, place} = Places.fetch(top_slug(view))
       card = view |> element("#card-#{place.slug}") |> render()
 
-      assert card =~ place.beer_note
-      assert card =~ place.food_note
+      assert card =~ escaped(place.beer_note)
+      assert card =~ escaped(place.food_note)
       assert card =~ "Office"
       assert card =~ "Station"
       assert card =~ to_string(Reach.minutes(place.office))

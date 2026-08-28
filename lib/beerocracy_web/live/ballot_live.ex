@@ -11,6 +11,7 @@ defmodule BeerocracyWeb.BallotLive do
   alias Beerocracy.Accounts
   alias Beerocracy.Accounts.Scope
   alias Beerocracy.Ballot
+  alias Beerocracy.Minutes
   alias Beerocracy.Places
   alias Beerocracy.Places.Opening
   alias Beerocracy.Places.Place
@@ -112,6 +113,42 @@ defmodule BeerocracyWeb.BallotLive do
     end
   end
 
+  def handle_event(
+        "record_visit",
+        %{"week_key" => week_key, "weekday" => weekday, "slug" => slug},
+        %{assigns: assigns} = socket
+      ) do
+    with {:ok, socket} <- require_admin(socket),
+         {:ok, week} <- Ballot.week_from_key(week_key, assigns.week),
+         {:ok, weekday} <- parse_weekday(weekday),
+         {:ok, place} <- Places.fetch(slug) do
+      Minutes.record(week, weekday, place.slug, assigns.voter_name)
+
+      {:noreply,
+       socket
+       |> assign_tally()
+       |> put_flash(:info, "Week #{week.week}: #{Week.label(weekday)} at #{place.name}.")}
+    else
+      {:error, socket} -> {:noreply, socket}
+      :error -> {:noreply, put_flash(socket, :error, "That is not a week and a place.")}
+    end
+  end
+
+  def handle_event("clear_visit", %{"week_key" => week_key}, %{assigns: assigns} = socket) do
+    with {:ok, socket} <- require_admin(socket),
+         {:ok, week} <- Ballot.week_from_key(week_key, assigns.week) do
+      Minutes.forget(week)
+
+      {:noreply,
+       socket
+       |> assign_tally()
+       |> put_flash(:info, "Week #{week.week} is back to whatever the vote says.")}
+    else
+      {:error, socket} -> {:noreply, socket}
+      :error -> {:noreply, socket}
+    end
+  end
+
   def handle_event("undo", _params, %{assigns: assigns} = socket) do
     with {:ok, socket} <- require_voter(socket),
          {:ok, slug} <- Ballot.undo_last_swipe(assigns.week, assigns.voter_key) do
@@ -196,6 +233,14 @@ defmodule BeerocracyWeb.BallotLive do
 
   defp require_voter(socket), do: {:ok, socket}
 
+  # The template only draws the controls for an admin; this is what actually
+  # stops anybody else, since an event can be sent without the button.
+  defp require_admin(%{assigns: %{current_scope: %{admin?: true}}} = socket), do: {:ok, socket}
+
+  defp require_admin(socket) do
+    {:error, put_flash(socket, :error, "That is not yours to set.")}
+  end
+
   # Never `String.to_atom/1` on user input; only the five days on the ballot map
   # to an atom at all.
   defp parse_weekday(value) do
@@ -227,6 +272,7 @@ defmodule BeerocracyWeb.BallotLive do
       outcome: outcome,
       soaking: Ballot.soaking_risk(outcome, forecasts),
       history: history,
+      recorded: Ballot.recorded_visit(assigns.week),
       visits: Ballot.last_visits(assigns.week)
     )
   end
@@ -287,6 +333,9 @@ defmodule BeerocracyWeb.BallotLive do
             outcome={@outcome}
             soaking={@soaking}
             history={@history}
+            recorded={@recorded}
+            week={@week}
+            admin?={@current_scope.admin?}
           />
 
           <.colophon />
@@ -773,6 +822,9 @@ defmodule BeerocracyWeb.BallotLive do
   attr :outcome, :any, default: nil
   attr :soaking, :any, default: nil
   attr :history, :list, default: []
+  attr :recorded, :any, default: nil
+  attr :week, Week, required: true
+  attr :admin?, :boolean, default: false
 
   defp tally_section(assigns) do
     ~H"""
@@ -783,11 +835,34 @@ defmodule BeerocracyWeb.BallotLive do
         )} and {@tally.place_votes_cast} swipes recorded.
       </.article_header>
 
+      <div :if={@recorded} class="mt-6 border-2 border-ink bg-ink p-5 text-paper">
+        <p class="eyebrow flex items-baseline justify-between gap-3 opacity-80">
+          <span>In the end</span>
+          <button
+            :if={@admin?}
+            type="button"
+            phx-click="clear_visit"
+            phx-value-week_key={@week.key}
+            class="underline underline-offset-2 opacity-80 hover:opacity-100"
+          >
+            Back to the vote
+          </button>
+        </p>
+        <p class="mt-2 text-2xl font-extrabold uppercase [font-stretch:80%] leading-tight sm:text-3xl">
+          {Week.label(@recorded.weekday)} at {@recorded.place.name}
+        </p>
+        <p class="data mt-2 opacity-80">
+          {Calendar.strftime(@recorded.date, "%d.%m.%Y")} · written down by {@recorded.recorded_by}
+        </p>
+      </div>
+
       <div
         :if={Ballot.decided?(@outcome)}
         class="mt-6 border-2 border-bottle bg-bottle p-5 text-paper"
       >
-        <p class="eyebrow opacity-80">As it stands</p>
+        <p class="eyebrow opacity-80">
+          {if @recorded, do: "What the vote said", else: "As it stands"}
+        </p>
         <p class="mt-2 text-2xl font-extrabold uppercase [font-stretch:80%] leading-tight sm:text-3xl">
           {Week.label(@outcome.day.weekday)} at {place_names(@outcome.places)}
         </p>
@@ -876,7 +951,23 @@ defmodule BeerocracyWeb.BallotLive do
             <span class="data w-8 shrink-0 text-ink-soft">{Week.short_label(visit.weekday)}</span>
             <span class="min-w-0 flex-1 truncate">
               <span aria-hidden="true">{visit.place.emoji}</span> {visit.place.name}
+              <span
+                :if={Ballot.Visit.recorded?(visit)}
+                class="data text-ink-soft"
+                title={"Written down by #{visit.recorded_by}, not what the vote said"}
+              >
+                · recorded
+              </span>
             </span>
+            <button
+              :if={@admin? and Ballot.Visit.recorded?(visit)}
+              type="button"
+              phx-click="clear_visit"
+              phx-value-week_key={visit.week.key}
+              class="data shrink-0 text-ink-soft underline underline-offset-2 hover:text-ink"
+            >
+              clear
+            </button>
             <span class="data shrink-0 text-ink-soft">+{visit.likes}</span>
           </li>
         </ol>
@@ -911,9 +1002,75 @@ defmodule BeerocracyWeb.BallotLive do
           </span>
         </div>
       </div>
+
+      <div :if={@admin?} class="mt-8 border-2 border-dashed border-rule p-5">
+        <h3 class="eyebrow text-ink-soft">The minutes</h3>
+        <p class="note mt-2">
+          The ballot says where we agreed to go, which is not always where we went.
+          Writing it down here corrects that week — in the archive, and in the
+          "we were there recently" note on the cards. It changes no votes.
+        </p>
+
+        <form phx-submit="record_visit" class="mt-4 flex flex-wrap items-end gap-3">
+          <label>
+            <span class="eyebrow text-ink-soft">Week</span>
+            <select name="week_key" class="field mt-1">
+              <option :for={{key, label} <- recordable_weeks(@week, @history)} value={key}>
+                {label}
+              </option>
+            </select>
+          </label>
+
+          <label>
+            <span class="eyebrow text-ink-soft">Day</span>
+            <select name="weekday" class="field mt-1">
+              <option
+                :for={weekday <- Week.weekdays()}
+                value={weekday}
+                selected={weekday == default_weekday(@recorded, @outcome)}
+              >
+                {Week.label(weekday)}
+              </option>
+            </select>
+          </label>
+
+          <label class="min-w-48 flex-1">
+            <span class="eyebrow text-ink-soft">Where we went</span>
+            <%!-- The whole catalogue, not just what was open: a place being shut
+                  on paper is exactly the sort of thing this exists to correct. --%>
+            <select name="slug" class="field mt-1">
+              <option
+                :for={place <- Places.all()}
+                value={place.slug}
+                selected={place.slug == default_slug(@recorded, @outcome)}
+              >
+                {place.name}
+              </option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn">Write it down</button>
+        </form>
+      </div>
     </section>
     """
   end
+
+  # This week first, then the weeks already on the sheet — the archive is read
+  # back from votes, so those are the only past weeks there is anything to say
+  # about.
+  defp recordable_weeks(week, history) do
+    [{week.key, "W#{week.week} · this week"}] ++
+      Enum.map(history, &{&1.week.key, "W#{&1.week.week}"})
+  end
+
+  defp default_weekday(%Ballot.Visit{weekday: weekday}, _outcome), do: weekday
+  defp default_weekday(nil, %{day: %{weekday: weekday}}), do: weekday
+  defp default_weekday(nil, _undecided), do: :thursday
+
+  defp default_slug(%Ballot.Visit{place: place}, _outcome), do: place.slug
+  defp default_slug(nil, %{places: [%{place: place} | _]}), do: place.slug
+  defp default_slug(nil, _undecided), do: nil
 
   # ── Shared bits ────────────────────────────────────────────────────────────
 

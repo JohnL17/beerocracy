@@ -181,6 +181,7 @@ got added.
 | `lib/beerocracy/voting/`     | Ash resources: `DayVote` and `PlaceVote`, one row per person per week. |
 | `lib/beerocracy/ballot.ex`   | Turns votes into a tally and broadcasts changes over PubSub.       |
 | `lib/beerocracy/accounts.ex`  | Display names, and who is an admin. Signing in itself is `ash_authentication`. |
+| `lib/beerocracy/minutes.ex`  | Where we actually went, when that was not where we voted to go. The one thing not derived from votes. |
 | `lib/beerocracy_web/live/ballot_live.ex` | The entire UI, plus the swipe gesture as a colocated hook. |
 
 **Only the people who will actually be there choose the place.** A swipe counts
@@ -201,9 +202,18 @@ ended, or whose hours miss the evening entirely, leaves the ballot by itself.
 **An outdoor place on a wet day gets a warning**, not a demotion. People are
 allowed to sit in the rain; they just should not be surprised by it.
 
-**Past weeks are read back from the votes already stored** — nothing extra is
-recorded. Each card shows how long ago we were last there, and the tally lists
-recent weeks, so nobody proposes the same pub four Thursdays running.
+**Past weeks are read back from the votes already stored.** Each card shows how
+long ago we were last there, and the tally lists recent weeks, so nobody
+proposes the same pub four Thursdays running.
+
+**Winning the vote is not the same as being where we went**, and an admin can
+say so. Article IV has a form — visible only to admins — for writing down the
+day and the place a week actually ended up at: the winner was shut, six people
+walked past it and went next door, somebody had a birthday. The record overrides
+that week in the archive and in the "we were there recently" note on the cards.
+It changes no votes, and the ballot's own verdict stays on the sheet underneath,
+relabelled *what the vote said*. Weeks without a correction — nearly all of
+them — behave exactly as they always did.
 
 The swipe deck is **dealt in a different order to every voter**, so the top of
 `places.yml` does not get judged while everyone is still interested while the
@@ -223,7 +233,7 @@ two people typing "Jonas" used to be one voter overwriting the other.
 Everyone with a GitHub account can sign in — the login is there to tell people
 apart, not to keep them out. Admins are the exception and are named by handle in
 `ADMIN_USERS`, which is a restart rather than a database edit; they get the
-LiveDashboard at `/admin/dashboard` and nothing else so far.
+LiveDashboard at `/admin/dashboard`, and the minutes described below.
 
 The sheet is readable signed out. **Reset my vote** in Article I clears your own
 days and swipes for the week and leaves everyone else's marks alone; **Undo**
