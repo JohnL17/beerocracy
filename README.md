@@ -118,9 +118,15 @@ $ mix beerocracy.migrate_voters jonas=anehx mira=miradev
 $ mix beerocracy.migrate_voters jonas=anehx mira=miradev --commit
 ```
 
-Nothing is written without `--commit`. Everyone being mapped has to have signed
-in at least once, since that is what creates the account to file the votes
-under — so the usual order is: deploy, let people sign in, then migrate.
+Nothing is written without `--commit`, and **nobody has to have signed in
+first**. A handle already on the sheet is resolved locally; anybody else is
+looked up against GitHub's public user endpoint, since an account id is public
+and permanent. Their votes are waiting for them the first time they arrive. The
+dry run prints the account each handle resolved to, so a mistyped handle reads
+as somebody else's name rather than quietly becoming somebody else's votes.
+
+Pass `--offline` to skip the lookup and work only with people who already have
+accounts here.
 
 This only matters for a week that is **still open**. A closed week reads back
 correctly whatever its votes are keyed on, because the archive is computed per

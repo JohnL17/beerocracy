@@ -11,7 +11,8 @@ config :beerocracy, :weather,
 config :beerocracy, :github,
   client_id: "test-client-id",
   client_secret: "test-client-secret",
-  redirect_uri: "http://localhost:4002/auth"
+  redirect_uri: "http://localhost:4002/auth",
+  directory: Beerocracy.GitHubDirectoryStub
 
 config :beerocracy, token_signing_secret: "test-only-token-signing-secret"
 

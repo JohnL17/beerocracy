@@ -5,6 +5,7 @@ defmodule Beerocracy.MigrateVotersTest do
 
   alias Beerocracy.Accounts.User
   alias Beerocracy.AccountsFixtures
+  alias Beerocracy.GitHubDirectoryStub
   alias Beerocracy.Ballot
   alias Beerocracy.Voting
   alias Beerocracy.Week
@@ -122,10 +123,77 @@ defmodule Beerocracy.MigrateVotersTest do
     end
   end
 
+  describe "somebody who has not signed in yet" do
+    test "is resolved against GitHub and their votes wait for them" do
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+
+      run(["jonas=newcomer", "--commit"])
+
+      assert keys() == ["gh:424242"]
+    end
+
+    test "shows whose account it resolved to, so a typo is visible" do
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+
+      assert run(["jonas=newcomer"]) =~ "GitHub: New Comer (@newcomer)"
+    end
+
+    test "keeps the name the votes were cast under, having none to impose" do
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+
+      run(["jonas=newcomer", "--commit"])
+
+      assert Voting.all_day_votes!() |> hd() |> Map.fetch!(:voter_name) == "Jonas"
+    end
+
+    test "is adopted properly once they do sign in" do
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+      run(["jonas=newcomer", "--commit"])
+
+      user = AccountsFixtures.user(name: "Newbie", login: "newcomer", github_id: 424_242)
+
+      assert Ballot.voter_state(Week.current(), User.voter_key(user)).days == %{thursday: :yes}
+    end
+
+    test "prefers the local account when there is one, without a lookup", %{user: user} do
+      # Deliberately not taught to the stub: a local hit must not need it.
+      run(["jonas=anehx", "--commit"])
+
+      assert keys() == [User.voter_key(user)]
+    end
+  end
+
   describe "refusing" do
-    test "will not invent an account for somebody who has never signed in" do
-      assert_raise Mix.Error, ~r/no account for: ghost/, fn ->
+    test "will not invent an account for a handle GitHub does not know" do
+      assert_raise Mix.Error, ~r/no such GitHub account/, fn ->
         run(["jonas=ghost", "--commit"])
+      end
+    end
+
+    test "--offline refuses to look anybody up" do
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+
+      assert_raise Mix.Error, ~r/--offline forbids/, fn ->
+        run(["jonas=newcomer", "--offline", "--commit"])
+      end
+    end
+
+    test "--offline still works for somebody already here", %{user: user} do
+      run(["jonas=anehx", "--offline", "--commit"])
+
+      assert keys() == [User.voter_key(user)]
+    end
+
+    test "nothing is written when one handle in a batch fails" do
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+
+      assert_raise Mix.Error, fn -> run(["jonas=newcomer", "mira=ghost", "--commit"]) end
+      assert keys() == ["jonas"]
+    end
+
+    test "rejects a misspelled flag rather than ignoring it" do
+      assert_raise Mix.Error, ~r/unknown option: --ofline/, fn ->
+        run(["jonas=anehx", "--ofline", "--commit"])
       end
     end
 
