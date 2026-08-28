@@ -8,6 +8,8 @@ defmodule BeerocracyWeb.BallotLive do
 
   use BeerocracyWeb, :live_view
 
+  alias Beerocracy.Accounts
+  alias Beerocracy.Accounts.Scope
   alias Beerocracy.Ballot
   alias Beerocracy.Places
   alias Beerocracy.Places.Opening
@@ -31,44 +33,41 @@ defmodule BeerocracyWeb.BallotLive do
       :timer.send_interval(:timer.minutes(1), self(), :tick)
     end
 
+    scope = socket.assigns.current_scope
+
     {:ok,
      socket
      |> assign(
        page_title: "Week #{week.week}",
        week: week,
-       voter_name: nil,
-       voter_key: nil,
+       voter_name: Scope.voter_name(scope),
+       voter_key: Scope.voter_key(scope),
        day_stances: %{},
        decided: %{},
-       undone: nil
+       undone: nil,
+       renaming?: false
      )
+     |> restore_voter_state()
      |> assign_tally()}
   end
 
   @impl true
-  def handle_event("restore_voter", %{"name" => name}, socket) do
-    {:noreply, register(socket, name)}
+  def handle_event("rename", _params, socket) do
+    {:noreply, assign(socket, renaming?: true)}
   end
 
-  def handle_event("register", %{"name" => name}, socket) do
-    case String.trim(name) do
-      "" ->
-        {:noreply,
-         put_flash(socket, :error, "Enter a name first — that is how the tally knows you.")}
+  def handle_event("cancel_rename", _params, socket) do
+    {:noreply, assign(socket, renaming?: false)}
+  end
 
-      name ->
-        {:noreply,
-         socket
-         |> register(name)
-         |> push_event("beerocracy:remember", %{name: name})}
+  def handle_event("save_name", %{"display_name" => name}, %{assigns: assigns} = socket) do
+    case require_voter(socket) do
+      {:ok, socket} ->
+        {:noreply, save_name(socket, assigns.current_scope.user, name)}
+
+      {:error, socket} ->
+        {:noreply, socket}
     end
-  end
-
-  def handle_event("sign_out", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(voter_name: nil, voter_key: nil, day_stances: %{}, decided: %{})
-     |> push_event("beerocracy:forget", %{})}
   end
 
   def handle_event("cycle_day", %{"weekday" => weekday}, %{assigns: assigns} = socket) do
@@ -154,14 +153,35 @@ defmodule BeerocracyWeb.BallotLive do
     end
   end
 
-  defp register(socket, name) do
-    name = name |> String.trim() |> String.replace(~r/\s+/u, " ")
+  defp save_name(%{assigns: assigns} = socket, user, name) do
+    case Accounts.rename(user, name) do
+      {:ok, renamed} ->
+        # The name is copied onto every vote as it is cast, so the copies have
+        # to follow it, or the tally goes on using the old one.
+        Ballot.rename_voter(
+          assigns.week,
+          Scope.voter_key(assigns.current_scope),
+          renamed.display_name
+        )
 
-    socket
-    |> assign(voter_name: name, voter_key: Ballot.voter_key(name))
-    |> restore_voter_state()
-    |> assign_tally()
+        socket
+        |> assign(
+          current_scope: Scope.for_user(renamed),
+          voter_name: renamed.display_name,
+          renaming?: false
+        )
+        |> assign_tally()
+        |> put_flash(:info, "The sheet will call you #{renamed.display_name} from now on.")
+
+      {:error, reason} ->
+        put_flash(socket, :error, name_error(reason))
+    end
   end
+
+  defp name_error(:blank), do: "A name with nothing in it is no name at all."
+  defp name_error(:too_long), do: "That is longer than #{Accounts.name_limit()} characters."
+  defp name_error(:taken), do: "Somebody on the sheet already goes by that. Pick another."
+  defp name_error(_other), do: "That name would not save."
 
   defp restore_voter_state(%{assigns: %{voter_key: nil}} = socket), do: socket
 
@@ -171,7 +191,7 @@ defmodule BeerocracyWeb.BallotLive do
   end
 
   defp require_voter(%{assigns: %{voter_key: nil}} = socket) do
-    {:error, put_flash(socket, :error, "Sign the register first, then vote.")}
+    {:error, put_flash(socket, :error, "Sign in first, then vote.")}
   end
 
   defp require_voter(socket), do: {:ok, socket}
@@ -225,20 +245,20 @@ defmodule BeerocracyWeb.BallotLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
-      <div
-        id="ballot"
-        class="px-0 py-0 sm:px-6 sm:py-10"
-        phx-hook=".Register"
-        data-registered={to_string(!is_nil(@voter_key))}
-      >
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
+      <div id="ballot" class="px-0 py-0 sm:px-6 sm:py-10">
         <div class="sheet animate-sheet">
           <div class="sheet-perforation"></div>
           <div class="h-2 bg-bottle"></div>
 
           <.masthead week={@week} voters={@tally.voters} />
 
-          <.register_section voter_name={@voter_name} week={@week.week} />
+          <.register_section
+            voter_name={@voter_name}
+            week={@week.week}
+            renaming?={@renaming?}
+            limit={Accounts.name_limit()}
+          />
 
           <.day_section
             locked={is_nil(@voter_key)}
@@ -273,24 +293,6 @@ defmodule BeerocracyWeb.BallotLive do
         </div>
       </div>
     </Layouts.app>
-
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".Register">
-      // The name is the whole identity system, so we keep it on the device and
-      // hand it back to the server on the next visit.
-      const KEY = "beerocracy:name"
-
-      export default {
-        mounted() {
-          this.handleEvent("beerocracy:remember", ({name}) => localStorage.setItem(KEY, name))
-          this.handleEvent("beerocracy:forget", () => localStorage.removeItem(KEY))
-
-          const stored = localStorage.getItem(KEY)
-          if (stored && this.el.dataset.registered !== "true") {
-            this.pushEvent("restore_voter", {name: stored})
-          }
-        }
-      }
-    </script>
     """
   end
 
@@ -326,37 +328,51 @@ defmodule BeerocracyWeb.BallotLive do
 
   attr :voter_name, :string, default: nil
   attr :week, :integer, required: true
+  attr :renaming?, :boolean, default: false
+  attr :limit, :integer, required: true
 
   defp register_section(assigns) do
     ~H"""
     <section class="sheet-section">
       <.article_header no="I" title="The register">
-        Your name is the whole login system. Use the same one every week and the sheet
-        will remember what you already voted for.
+        GitHub says who you are, so nobody can vote as you and the sheet remembers what
+        you already picked. What it calls you on the sheet is up to you, and changing it
+        costs you nothing — no vote is filed under your name.
       </.article_header>
 
-      <div :if={is_nil(@voter_name)} class="mt-5">
-        <form phx-submit="register" class="flex flex-wrap items-end gap-3">
-          <label class="min-w-48 flex-1">
-            <span class="eyebrow text-ink-soft">Your name</span>
-            <input
-              type="text"
-              name="name"
-              class="field mt-1"
-              placeholder="e.g. Hanni"
-              autocomplete="nickname"
-              maxlength="40"
-              required
-            />
-          </label>
-          <button type="submit" class="btn">Sign in</button>
-        </form>
+      <div :if={is_nil(@voter_name)} class="mt-5 flex flex-wrap items-center gap-4">
+        <.link href={~p"/auth/user/github"} class="btn">
+          <.icon name="hero-arrow-right-end-on-rectangle" class="mr-2 size-4" /> Sign in with GitHub
+        </.link>
+        <p class="text-ink-soft">Read the sheet all you like; marking it needs a name.</p>
       </div>
 
-      <div :if={@voter_name} class="mt-5 flex flex-wrap items-center gap-3">
+      <form
+        :if={@voter_name && @renaming?}
+        phx-submit="save_name"
+        class="mt-5 flex flex-wrap items-end gap-3"
+      >
+        <label class="min-w-48 flex-1">
+          <span class="eyebrow text-ink-soft">What the sheet calls you</span>
+          <input
+            type="text"
+            name="display_name"
+            value={@voter_name}
+            class="field mt-1"
+            autocomplete="nickname"
+            maxlength={@limit}
+            required
+          />
+        </label>
+        <button type="submit" class="btn">Save</button>
+        <button type="button" phx-click="cancel_rename" class="btn btn-quiet">Cancel</button>
+      </form>
+
+      <div :if={@voter_name && !@renaming?} class="mt-5 flex flex-wrap items-center gap-3">
         <p class="mr-auto text-xl font-extrabold uppercase [font-stretch:82%]">
           Signed: {@voter_name}
         </p>
+        <button type="button" phx-click="rename" class="btn btn-quiet">Change name</button>
         <button
           type="button"
           phx-click="reset_vote"
@@ -365,9 +381,7 @@ defmodule BeerocracyWeb.BallotLive do
         >
           Reset my vote
         </button>
-        <button type="button" phx-click="sign_out" class="btn btn-quiet">
-          Not you?
-        </button>
+        <.link href={~p"/sign-out"} method="delete" class="btn btn-quiet">Sign out</.link>
       </div>
     </section>
     """

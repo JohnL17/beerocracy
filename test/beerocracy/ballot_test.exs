@@ -12,17 +12,6 @@ defmodule Beerocracy.BallotTest do
     %{week: Week.from_date(~D[2026-08-19]), next: Week.from_date(~D[2026-08-26])}
   end
 
-  describe "voter_key/1" do
-    test "treats a name as the same person regardless of case and padding" do
-      assert Ballot.voter_key("  Jonas  ") == Ballot.voter_key("jonas")
-      assert Ballot.voter_key("Ada  Lovelace") == Ballot.voter_key("ada lovelace")
-    end
-
-    test "keeps different people apart" do
-      refute Ballot.voter_key("Jonas") == Ballot.voter_key("Jonah")
-    end
-  end
-
   describe "cycle_day/4" do
     test "walks a day from nothing, to yes, to maybe, and back", %{week: week} do
       assert Ballot.cycle_day(week, "Jonas", key("Jonas"), :wednesday) == %{wednesday: :yes}
@@ -633,7 +622,9 @@ defmodule Beerocracy.BallotTest do
     }
   end
 
-  defp key(name), do: Ballot.voter_key(name)
+  # Vote keys come from GitHub in the real thing and are opaque to the ballot,
+  # so the tests only need one that is stable per name.
+  defp key(name), do: "gh:" <> String.downcase(name)
 
   # Saying which days work is what earns a say in where.
   defp commits(week, name), do: Ballot.set_day(week, name, key(name), :wednesday, :yes)

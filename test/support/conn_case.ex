@@ -35,4 +35,28 @@ defmodule BeerocracyWeb.ConnCase do
     Beerocracy.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  Signs a voter in the way the GitHub round trip would, minus the round trip.
+
+  Takes the same options as `Beerocracy.AccountsFixtures.user/1`, and returns
+  `%{conn: conn, user: user}` so it can be used as a `setup` or called inline.
+  """
+  def sign_in(%{conn: conn} = context, attrs \\ []) do
+    user = Beerocracy.AccountsFixtures.user(attrs)
+
+    Map.merge(context, %{conn: sign_in_as(conn, user), user: user})
+  end
+
+  @doc """
+  Puts an existing voter into a connection's session.
+
+  Two connections signed in as the same user are the same person on two
+  devices, which is the only way to test that the sheet remembers them.
+  """
+  def sign_in_as(conn, user) do
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> AshAuthentication.Plug.Helpers.store_in_session(user)
+  end
 end

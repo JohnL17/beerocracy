@@ -9,7 +9,7 @@ import Config
 
 config :beerocracy,
   ecto_repos: [Beerocracy.Repo],
-  ash_domains: [Beerocracy.Voting],
+  ash_domains: [Beerocracy.Voting, Beerocracy.Accounts],
   generators: [timestamp_type: :utc_datetime]
 
 # The catalogue of drinking establishments lives in a YAML file so that adding a
@@ -29,6 +29,22 @@ config :beerocracy, :weather,
   longitude: 7.4474,
   timezone: "Europe/Zurich",
   refresh_every: :timer.hours(1)
+
+# Signing in goes through a GitHub OAuth application. Register one at
+# https://github.com/settings/developers with the callback URL
+# <your host>/auth/user/github/callback, then set GITHUB_CLIENT_ID and
+# GITHUB_CLIENT_SECRET. `redirect_uri` is the base of the auth routes, not the
+# callback itself. Without credentials the app still runs — nobody can sign in,
+# so nobody can vote, and the sheet says as much.
+config :beerocracy, :github,
+  client_id: nil,
+  client_secret: nil,
+  redirect_uri: nil
+
+# Who may look behind the counter, by GitHub handle. Deliberately empty by
+# default: an app that ships with an admin is an app with somebody else's admin.
+# Set ADMIN_USERS to a comma-separated list of handles.
+config :beerocracy, admins: []
 
 # The hours a beer actually happens in. The forecast summarises exactly these,
 # and a place whose opening hours miss them is no use however good the beer is.

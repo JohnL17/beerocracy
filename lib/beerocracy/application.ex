@@ -14,6 +14,8 @@ defmodule Beerocracy.Application do
        repos: Application.fetch_env!(:beerocracy, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:beerocracy, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Beerocracy.PubSub},
+      # Sweeps up expired tokens for the authenticated resources.
+      {AshAuthentication.Supervisor, otp_app: :beerocracy},
       Beerocracy.Weather,
       # Start a worker by calling: Beerocracy.Worker.start_link(arg)
       # {Beerocracy.Worker, arg},

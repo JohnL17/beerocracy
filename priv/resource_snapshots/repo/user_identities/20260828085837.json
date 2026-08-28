@@ -1,0 +1,114 @@
+{
+  "attributes": [
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "refresh_token",
+      "references": null,
+      "allow_nil?": true,
+      "generated?": false,
+      "primary_key?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "utc_datetime_usec",
+      "source": "access_token_expires_at",
+      "references": null,
+      "allow_nil?": true,
+      "generated?": false,
+      "primary_key?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "access_token",
+      "references": null,
+      "allow_nil?": true,
+      "generated?": false,
+      "primary_key?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "uid",
+      "references": null,
+      "allow_nil?": false,
+      "generated?": false,
+      "primary_key?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "text",
+      "source": "strategy",
+      "references": null,
+      "allow_nil?": false,
+      "generated?": false,
+      "primary_key?": false
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "uuid",
+      "source": "id",
+      "references": null,
+      "allow_nil?": false,
+      "generated?": false,
+      "primary_key?": true
+    },
+    {
+      "default": "nil",
+      "size": null,
+      "type": "uuid",
+      "source": "user_id",
+      "references": {
+        "name": "user_identities_user_id_fkey",
+        "table": "users",
+        "primary_key?": true,
+        "multitenancy": {
+          "global": null,
+          "strategy": null,
+          "attribute": null
+        },
+        "on_delete": null,
+        "destination_attribute": "id",
+        "deferrable": false,
+        "destination_attribute_default": null,
+        "destination_attribute_generated": null,
+        "on_update": null
+      },
+      "allow_nil?": true,
+      "generated?": false,
+      "primary_key?": false
+    }
+  ],
+  "table": "user_identities",
+  "hash": "B28CCF182696D6DBB9EC6B6DBAE71D3F909644A93C2B162F5A1290B899BB3955",
+  "repo": "Elixir.Beerocracy.Repo",
+  "strict?": false,
+  "identities": [
+    {
+      "name": "unique_on_strategy_and_uid",
+      "keys": [
+        "strategy",
+        "uid"
+      ],
+      "nils_distinct?": true,
+      "index_name": "user_identities_unique_on_strategy_and_uid_index",
+      "base_filter": null
+    }
+  ],
+  "multitenancy": {
+    "global": null,
+    "strategy": null,
+    "attribute": null
+  },
+  "base_filter": null,
+  "custom_indexes": [],
+  "custom_statements": [],
+  "has_create_action": true
+}

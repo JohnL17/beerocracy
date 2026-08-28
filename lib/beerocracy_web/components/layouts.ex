@@ -12,15 +12,29 @@ defmodule BeerocracyWeb.Layouts do
 
   ## Examples
 
-      <Layouts.app flash={@flash}>
+      <Layouts.app flash={@flash} current_scope={@current_scope}>
         <h1>Content</h1>
       </Layouts.app>
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
+
+  attr :current_scope, Beerocracy.Accounts.Scope,
+    default: nil,
+    doc: "who is reading the page; the only thing it changes is the admin link"
+
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
+    <div :if={@current_scope && @current_scope.admin?} class="mx-auto max-w-5xl px-5 pt-3 sm:px-6">
+      <.link
+        navigate="/admin/dashboard"
+        class="eyebrow text-ink-soft hover:text-ink float-right inline-flex items-center gap-1"
+      >
+        <.icon name="hero-wrench-screwdriver" class="size-3" /> Dashboard
+      </.link>
+    </div>
+
     <main>
       {render_slot(@inner_block)}
     </main>

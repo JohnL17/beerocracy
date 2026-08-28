@@ -43,6 +43,8 @@ defmodule Beerocracy.MixProject do
       {:ash, "~> 3.31"},
       {:ash_sqlite, "~> 0.2.17"},
       {:ash_phoenix, "~> 2.3"},
+      {:ash_authentication, "~> 4.14"},
+      {:ash_authentication_phoenix, "~> 2.17"},
       {:yaml_elixir, "~> 2.12"},
       {:req, "~> 0.7.2"},
       {:phoenix, "~> 1.8.3"},
@@ -67,6 +69,7 @@ defmodule Beerocracy.MixProject do
       {:telemetry_poller, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
+      {:dotenvy, "~> 1.1"},
       {:bandit, "~> 1.5"}
     ]
   end

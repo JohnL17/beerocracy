@@ -29,12 +29,16 @@ defmodule BeerocracyWeb.BallotLiveTest do
       end
     end
 
-    test "locks the voting sections until someone signs the register", %{conn: conn} do
+    test "locks the voting sections until somebody signs in", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/")
 
       assert view |> element("section[data-locked]") |> has_element?()
+      assert view |> element("a[href='/auth/user/github']") |> has_element?()
+    end
 
-      view |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
+    test "unlocks them for a signed-in voter", context do
+      %{conn: conn} = sign_in(context, name: "Jonas")
+      {:ok, view, _html} = live(conn, ~p"/")
 
       refute view |> element("section[data-locked]") |> has_element?()
       assert render(view) =~ "Signed: Jonas"
@@ -47,13 +51,63 @@ defmodule BeerocracyWeb.BallotLiveTest do
       assert view |> element("a[href='#{Places.edit_url()}']") |> render() =~ "Add a place"
     end
 
-    test "refuses a blank name", %{conn: conn} do
+    test "falls back to the GitHub handle when the profile has no name", context do
+      %{conn: conn} = sign_in(context, login: "hanni", name: nil)
       {:ok, view, _html} = live(conn, ~p"/")
 
-      html = render_submit(view, "register", %{"name" => "   "})
+      assert render(view) =~ "Signed: hanni"
+    end
+  end
 
-      assert html =~ "Enter a name first"
-      assert view |> element("section[data-locked]") |> has_element?()
+  describe "changing your display name" do
+    setup [:signed_in]
+
+    test "renames you on the sheet", %{view: view} do
+      render_submit(view, "save_name", %{"display_name" => "Hanni"})
+
+      assert render(view) =~ "Signed: Hanni"
+      assert render(view) =~ "will call you Hanni"
+    end
+
+    test "refuses a blank one", %{view: view} do
+      html = render_submit(view, "save_name", %{"display_name" => "   "})
+
+      assert html =~ "no name at all"
+      assert render(view) =~ "Signed: Jonas"
+    end
+
+    test "refuses a name somebody else already goes by", %{view: view} do
+      Beerocracy.AccountsFixtures.user(name: "Mira")
+
+      html = render_submit(view, "save_name", %{"display_name" => " mira "})
+
+      assert html =~ "already goes by that"
+      assert render(view) =~ "Signed: Jonas"
+    end
+
+    test "carries the new name onto votes already cast", %{view: view} do
+      tap_day(view, :thursday)
+      render_hook(view, "swipe", %{"slug" => "shamrock", "liked" => true})
+
+      render_submit(view, "save_name", %{"display_name" => "Hanni"})
+
+      day =
+        Week.current()
+        |> Ballot.tally()
+        |> Map.fetch!(:days)
+        |> Enum.find(&(&1.weekday == :thursday))
+
+      assert day.voters == ["Hanni"]
+      refute render(view) =~ "Jonas"
+    end
+
+    test "keeps the votes filed under the same key", %{view: view, user: user} do
+      tap_day(view, :thursday)
+      render_submit(view, "save_name", %{"display_name" => "Hanni"})
+
+      state = Ballot.voter_state(Week.current(), Beerocracy.Accounts.User.voter_key(user))
+
+      assert state.days == %{thursday: :yes}
     end
   end
 
@@ -129,30 +183,23 @@ defmodule BeerocracyWeb.BallotLiveTest do
       assert view |> element("#card-#{third}[data-depth='2']") |> has_element?()
     end
 
-    test "deals them in a different order to a different voter", %{conn: conn} do
+    test "deals them in a different order to a different voter", _context do
       orders =
         for name <- ~w(Jonas Mira Ada Kim Sam) do
-          {:ok, view, _} = live(conn, ~p"/")
-          view |> form("form[phx-submit=register]", name: name) |> render_submit()
-          deck_slugs(view)
+          deck_slugs(another_voter(name))
         end
 
       assert length(Enum.uniq(orders)) > 1,
              "every voter was dealt the same three cards first"
     end
 
-    test "deals the same order to the same voter on a later visit", %{conn: conn} do
-      first_visit =
-        (fn ->
-           {:ok, view, _} = live(conn, ~p"/")
-           view |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
-           deck_slugs(view)
-         end).()
+    test "deals the same order to the same voter on a later visit", %{view: view, user: user} do
+      first_visit = deck_slugs(view)
 
-      {:ok, view, _} = live(build_conn(), ~p"/")
-      render_hook(view, "restore_voter", %{"name" => "Jonas"})
+      # The same account, a second browser.
+      {:ok, again, _} = live(sign_in_as(build_conn(), user), ~p"/")
 
-      assert deck_slugs(view) == first_visit
+      assert deck_slugs(again) == first_visit
     end
 
     test "shows the beer, food and proximity information on the card", %{view: view} do
@@ -275,11 +322,10 @@ defmodule BeerocracyWeb.BallotLiveTest do
       week = Week.current()
       past = Week.from_date(Date.add(week.monday, -7))
 
-      Ballot.set_day(past, "Jonas", Ballot.voter_key("Jonas"), :thursday, :yes)
-      Ballot.swipe(past, "Jonas", Ballot.voter_key("Jonas"), "shamrock", true)
+      Ballot.set_day(past, "Jonas", "gh:1", :thursday, :yes)
+      Ballot.swipe(past, "Jonas", "gh:1", "shamrock", true)
 
       {:ok, view, _html} = live(conn, ~p"/")
-      view |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
 
       html = render(view)
       assert html =~ "Where we went"
@@ -341,13 +387,12 @@ defmodule BeerocracyWeb.BallotLiveTest do
       refute render(view) =~ "Your swipes are not counting yet"
     end
 
-    test "names the people whose swipes are parked", %{view: view, conn: conn} do
+    test "names the people whose swipes are parked", %{view: view} do
       # Jonas commits and swipes; Mira only swipes.
       tap_day(view, :wednesday)
       render_hook(view, "swipe", %{"slug" => "shamrock", "liked" => true})
 
-      {:ok, mira, _} = live(conn, ~p"/")
-      mira |> form("form[phx-submit=register]", name: "Mira") |> render_submit()
+      mira = another_voter("Mira")
       render_hook(mira, "swipe", %{"slug" => "pickwick", "liked" => true})
 
       html = render(view)
@@ -358,14 +403,12 @@ defmodule BeerocracyWeb.BallotLiveTest do
       assert html =~ "+1?"
     end
 
-    test "the parked swipe does not decide the winner", %{view: view, conn: conn} do
+    test "the parked swipe does not decide the winner", %{view: view} do
       tap_day(view, :wednesday)
       render_hook(view, "swipe", %{"slug" => "shamrock", "liked" => true})
 
       for name <- ~w(Mira Ada) do
-        {:ok, other, _} = live(conn, ~p"/")
-        other |> form("form[phx-submit=register]", name: name) |> render_submit()
-        render_hook(other, "swipe", %{"slug" => "pickwick", "liked" => true})
+        render_hook(another_voter(name), "swipe", %{"slug" => "pickwick", "liked" => true})
       end
 
       assert Ballot.winning_place(Ballot.tally(Week.current())).place.slug == "shamrock"
@@ -406,9 +449,8 @@ defmodule BeerocracyWeb.BallotLiveTest do
       assert html =~ "Nothing to clear"
     end
 
-    test "leaves everyone else's votes alone", %{view: view, conn: conn} do
-      {:ok, mira, _} = live(conn, ~p"/")
-      mira |> form("form[phx-submit=register]", name: "Mira") |> render_submit()
+    test "leaves everyone else's votes alone", %{view: view} do
+      mira = another_voter("Mira")
       mira |> element("button[phx-value-weekday=monday]") |> render_click()
 
       tap_day(view, :monday)
@@ -427,14 +469,11 @@ defmodule BeerocracyWeb.BallotLiveTest do
   end
 
   describe "several voters" do
-    test "one voter's swipe shows up on another's sheet without a reload", %{conn: conn} do
+    test "one voter's swipe shows up on another's sheet without a reload", _context do
       place = hd(Places.all())
 
-      {:ok, mira, _} = live(conn, ~p"/")
-      mira |> form("form[phx-submit=register]", name: "Mira") |> render_submit()
-
-      {:ok, jonas, _} = live(build_conn(), ~p"/")
-      jonas |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
+      mira = another_voter("Mira")
+      jonas = another_voter("Jonas")
 
       render_hook(jonas, "swipe", %{"slug" => place.slug, "liked" => true})
       jonas |> element("button[phx-value-weekday=thursday]") |> render_click()
@@ -445,40 +484,43 @@ defmodule BeerocracyWeb.BallotLiveTest do
       assert html =~ "Jonas"
     end
 
-    test "the same name picks up where it left off", %{conn: conn} do
+    test "the same account picks up where it left off", context do
       place = hd(Places.all())
+      %{conn: conn, user: user} = sign_in(context, name: "Jonas")
 
       {:ok, first, _} = live(conn, ~p"/")
-      first |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
       first |> element("button[phx-value-weekday=friday]") |> render_click()
       render_hook(first, "swipe", %{"slug" => place.slug, "liked" => true})
 
-      # A new browser, the name restored from local storage.
-      {:ok, second, _} = live(build_conn(), ~p"/")
-      render_hook(second, "restore_voter", %{"name" => "  jonas "})
+      # A second browser, signed in as the same GitHub account.
+      {:ok, second, _} = live(sign_in_as(build_conn(), user), ~p"/")
 
       assert stance(second, :friday) == "yes"
       refute second |> element("#card-#{place.slug}") |> has_element?()
-      assert render(second) =~ "Signed: jonas"
+      assert render(second) =~ "Signed: Jonas"
     end
 
-    test "signing out clears the sheet for the next person", %{conn: conn} do
+    test "signing out clears the sheet for the next person", context do
+      %{conn: conn} = sign_in(context, name: "Jonas")
+
       {:ok, view, _} = live(conn, ~p"/")
-      view |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
       view |> element("button[phx-value-weekday=monday]") |> render_click()
 
-      view |> element("button[phx-click=sign_out]") |> render_click()
+      conn = delete(conn, ~p"/sign-out")
+      assert redirected_to(conn) == ~p"/"
 
-      assert view |> element("section[data-locked]") |> has_element?()
-      assert view |> element("form[phx-submit=register]") |> has_element?()
+      {:ok, after_out, _} = live(recycle(conn), ~p"/")
+
+      assert after_out |> element("section[data-locked]") |> has_element?()
+      assert after_out |> element("a[href='/auth/user/github']") |> has_element?()
       # The vote itself stays on the sheet — signing out is not a retraction.
-      assert render(view) =~ "Monday at" or Ballot.tally(Week.current()).day_votes_cast == 1
+      assert Ballot.tally(Week.current()).day_votes_cast == 1
     end
   end
 
   test "votes cast in another week do not appear on this week's sheet", %{conn: conn} do
     last_week = Week.from_date(Date.add(Date.utc_today(), -7))
-    Ballot.set_day(last_week, "Ghost", Ballot.voter_key("Ghost"), :monday, :yes)
+    Ballot.set_day(last_week, "Ghost", "gh:99", :monday, :yes)
 
     {:ok, _view, html} = live(conn, ~p"/")
 
@@ -526,9 +568,16 @@ defmodule BeerocracyWeb.BallotLiveTest do
   # Place names go through the templates, so `&` arrives as `&amp;`.
   defp escaped(text), do: text |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
 
-  defp signed_in(%{conn: conn}) do
+  defp signed_in(context) do
+    %{conn: conn} = context = sign_in(context, name: "Jonas")
     {:ok, view, _html} = live(conn, ~p"/")
-    view |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
-    %{view: view}
+    Map.put(context, :view, view)
+  end
+
+  # Somebody else, on their own connection, already looking at the sheet.
+  defp another_voter(name) do
+    %{conn: conn} = sign_in(%{conn: build_conn()}, name: name)
+    {:ok, view, _html} = live(conn, ~p"/")
+    view
   end
 end

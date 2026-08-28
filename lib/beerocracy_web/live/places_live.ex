@@ -63,7 +63,7 @@ defmodule BeerocracyWeb.PlacesLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash}>
+    <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="px-0 py-0 sm:px-6 sm:py-10">
         <div class="sheet animate-sheet">
           <div class="sheet-perforation"></div>

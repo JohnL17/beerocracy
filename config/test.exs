@@ -6,6 +6,18 @@ config :beerocracy, :weather,
   source: Beerocracy.WeatherStub,
   enabled: false
 
+# Nonsense credentials on purpose: the tests sign users in through the resource
+# rather than by walking the OAuth flow, so nothing here is ever sent anywhere.
+config :beerocracy, :github,
+  client_id: "test-client-id",
+  client_secret: "test-client-secret",
+  redirect_uri: "http://localhost:4002/auth"
+
+config :beerocracy, token_signing_secret: "test-only-token-signing-secret"
+
+# Nobody is an admin unless a test says so.
+config :beerocracy, admins: []
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used
@@ -14,6 +26,9 @@ config :beerocracy, :weather,
 config :beerocracy, Beerocracy.Repo,
   database: Path.expand("../beerocracy_test.db", __DIR__),
   pool_size: 5,
+  # SQLite lets one writer in at a time, and a test with several LiveViews on
+  # the sheet has several. Same reasoning as production, same timeout.
+  busy_timeout: 5_000,
   pool: Ecto.Adapters.SQL.Sandbox
 
 # We don't run a server during test. If one is required,

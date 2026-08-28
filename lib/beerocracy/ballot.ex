@@ -5,6 +5,10 @@ defmodule Beerocracy.Ballot do
   `Beerocracy.Voting` stores individual votes; this module turns them into the
   thing everybody actually wants to look at — a tally for the current week —
   and broadcasts when it changes so every open browser updates at once.
+
+  Voters are identified by an opaque `voter_key` that comes from
+  `Beerocracy.Accounts` and means nothing here. The display name travels
+  alongside it purely so the tally can be read back from the votes alone.
   """
 
   alias Beerocracy.Places
@@ -96,15 +100,6 @@ defmodule Beerocracy.Ballot do
   @doc "Listen for changes to a week's tally."
   @spec subscribe(Week.t() | String.t()) :: :ok | {:error, term()}
   def subscribe(week), do: Phoenix.PubSub.subscribe(@pubsub, topic(week))
-
-  @doc "Normalises a display name into the key that identifies a voter."
-  @spec voter_key(String.t()) :: String.t()
-  def voter_key(name) do
-    name
-    |> String.trim()
-    |> String.downcase()
-    |> String.replace(~r/\s+/u, " ")
-  end
 
   @doc """
   The full tally for a week: weekdays in MO-FR order, places ranked best first.
@@ -222,6 +217,30 @@ defmodule Beerocracy.Ballot do
       place_slug: place_slug,
       liked: liked?
     })
+
+    broadcast(week)
+  end
+
+  @doc """
+  Rewrites a voter's name on every mark they have ever made.
+
+  The name is copied onto each vote as it is cast, which is what lets the tally
+  be read back from the votes alone. The cost of that is this function: when
+  somebody renames themselves, the copies have to be brought along, or the sheet
+  goes on calling them by a name they have just abandoned.
+
+  Nothing is keyed on the name, so this is only ever cosmetic — no vote moves,
+  and nothing can collide.
+  """
+  @spec rename_voter(Week.t(), String.t(), String.t()) :: :ok
+  def rename_voter(%Week{} = week, voter_key, voter_name) do
+    Voting.all_day_votes!()
+    |> Enum.filter(&(&1.voter_key == voter_key))
+    |> Enum.each(&Voting.rename_day_voter!(&1, voter_name))
+
+    Voting.all_place_votes!()
+    |> Enum.filter(&(&1.voter_key == voter_key))
+    |> Enum.each(&Voting.rename_place_voter!(&1, voter_name))
 
     broadcast(week)
   end

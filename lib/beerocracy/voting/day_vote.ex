@@ -54,6 +54,11 @@ defmodule Beerocracy.Voting.DayVote do
       upsert_fields [:stance, :voter_name, :updated_at]
     end
 
+    update :rename_voter do
+      description "Rewrite the display name copied onto this row when its owner renames themselves."
+      accept [:voter_name]
+    end
+
     read :for_week do
       argument :week_key, :string, allow_nil?: false
       filter expr(week_key == ^arg(:week_key))

@@ -72,12 +72,28 @@ Changing a place's `slug` throws away that place's voting history — rename the
 
 ## Running it
 
+Signing in goes through GitHub, so you need an OAuth application of your own
+before the ballot will accept a vote. Register a development one at
+[github.com/settings/developers](https://github.com/settings/developers) with
+the callback URL `http://localhost:4000/auth/user/github/callback`, then put its
+credentials — and your own handle, so you are the admin — in a `.env` file:
+
+```console
+$ cp .env.example .env
+$ $EDITOR .env
+```
+
+`.env` is not checked in. Anything `config/runtime.exs` reads can go in it, and
+a real environment variable always wins over the file.
+
 ```console
 $ mix setup
 $ mix phx.server
 ```
 
-Then open [`localhost:4000`](http://localhost:4000).
+Then open [`localhost:4000`](http://localhost:4000). Without credentials the app
+still runs and the sheet is still readable — nobody can sign in, so nobody can
+vote.
 
 Useful commands:
 
@@ -98,6 +114,10 @@ $ docker run -d \
     -v beerocracy:/data \
     -p 4000:4000 \
     -e SECRET_KEY_BASE="$(mix phx.gen.secret)" \
+    -e TOKEN_SIGNING_SECRET="$(mix phx.gen.secret)" \
+    -e GITHUB_CLIENT_ID=... \
+    -e GITHUB_CLIENT_SECRET=... \
+    -e ADMIN_USERS=anehx \
     -e PHX_HOST=beer.example.com \
     ghcr.io/<owner>/<repo>:latest
 ```
@@ -135,6 +155,10 @@ pool timeout.
 | Variable          | Default              | What it does                                          |
 | ----------------- | -------------------- | ----------------------------------------------------- |
 | `SECRET_KEY_BASE` | —, **required**      | Signs session and LiveView tokens                     |
+| `TOKEN_SIGNING_SECRET` | —, **required** | Signs the sign-in tokens. Changing it signs everybody out |
+| `GITHUB_CLIENT_ID` | —                   | The OAuth application people sign in through          |
+| `GITHUB_CLIENT_SECRET` | —               | Its secret. Without both, nobody can sign in and nobody can vote |
+| `ADMIN_USERS`     | —, nobody            | Comma-separated GitHub handles allowed at `/admin/dashboard` |
 | `DATABASE_PATH`   | `/data/beerocracy.db` | SQLite file; keep it on a volume or votes die on redeploy |
 | `PHX_HOST`        | `localhost`          | Public hostname                                       |
 | `PHX_SCHEME`      | `https`              | Set to `http` when there is no TLS in front           |
@@ -156,6 +180,7 @@ got added.
 | `lib/beerocracy/places.ex`   | Parses and validates `priv/places.yml`, cached against the file's mtime. |
 | `lib/beerocracy/voting/`     | Ash resources: `DayVote` and `PlaceVote`, one row per person per week. |
 | `lib/beerocracy/ballot.ex`   | Turns votes into a tally and broadcasts changes over PubSub.       |
+| `lib/beerocracy/accounts.ex`  | Display names, and who is an admin. Signing in itself is `ash_authentication`. |
 | `lib/beerocracy_web/live/ballot_live.ex` | The entire UI, plus the swipe gesture as a colocated hook. |
 
 **Only the people who will actually be there choose the place.** A swipe counts
@@ -186,7 +211,20 @@ bottom gets rushed. The order is derived from your name and the week: stable
 every time you open the sheet — a deck that reordered itself between swipes
 would be unusable — different from everyone else's, and reshuffled next Monday.
 
-A person is identified by the name they type — no accounts, no passwords. It is
-kept in `localStorage` so the sheet remembers you next week. **Reset my vote**
-in Article I clears your own days and swipes for the week and leaves everyone
-else's marks alone; **Undo** under the deck takes back just the last swipe.
+**You sign in with GitHub, and pick your own name.** They are separate on
+purpose. Votes are filed under the GitHub account id — a number nobody can
+change and nobody else can claim — while the name on the sheet is yours to
+change whenever you like. Renaming yourself rewrites the name on every mark you
+have ever made and moves no votes at all, because nothing was ever keyed on it.
+
+The GitHub account also settles who is who, which the old name box could not:
+two people typing "Jonas" used to be one voter overwriting the other.
+
+Everyone with a GitHub account can sign in — the login is there to tell people
+apart, not to keep them out. Admins are the exception and are named by handle in
+`ADMIN_USERS`, which is a restart rather than a database edit; they get the
+LiveDashboard at `/admin/dashboard` and nothing else so far.
+
+The sheet is readable signed out. **Reset my vote** in Article I clears your own
+days and swipes for the week and leaves everyone else's marks alone; **Undo**
+under the deck takes back just the last swipe.

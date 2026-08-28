@@ -1,5 +1,13 @@
 [
-  import_deps: [:ecto, :ecto_sql, :phoenix, :ash, :ash_sqlite],
+  import_deps: [
+    :ecto,
+    :ecto_sql,
+    :phoenix,
+    :ash,
+    :ash_sqlite,
+    :ash_authentication,
+    :ash_authentication_phoenix
+  ],
   subdirectories: ["priv/*/migrations"],
   # Spark.Formatter is deliberately absent: it only reorders DSL sections, and
   # it formats differently depending on MIX_ENV, so `mix format` in a test shell

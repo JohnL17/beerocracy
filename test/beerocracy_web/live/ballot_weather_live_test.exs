@@ -141,9 +141,9 @@ defmodule BeerocracyWeb.BallotWeatherLiveTest do
     view |> element("button[phx-value-weekday=#{weekday}]") |> render_click()
   end
 
-  defp signed_in(%{conn: conn}) do
+  defp signed_in(context) do
+    %{conn: conn} = context = sign_in(context, name: "Jonas")
     {:ok, view, _html} = live(conn, ~p"/")
-    view |> form("form[phx-submit=register]", name: "Jonas") |> render_submit()
-    %{view: view}
+    Map.put(context, :view, view)
   end
 end

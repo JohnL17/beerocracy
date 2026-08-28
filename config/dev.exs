@@ -4,6 +4,8 @@ import Config
 config :beerocracy, Beerocracy.Repo,
   database: Path.expand("../beerocracy_dev.db", __DIR__),
   pool_size: 5,
+  # One writer at a time; wait rather than fail when two browsers swipe at once.
+  busy_timeout: 5_000,
   stacktrace: true,
   show_sensitive_data_on_connection_error: true
 
@@ -62,8 +64,12 @@ config :beerocracy, BeerocracyWeb.Endpoint,
     ]
   ]
 
-# Enable dev routes for dashboard and mailbox
+# Enable dev routes for the dashboard and mailbox.
 config :beerocracy, dev_routes: true
+
+# Signs session tokens locally. Not a secret worth protecting — production
+# takes its own from TOKEN_SIGNING_SECRET.
+config :beerocracy, token_signing_secret: "dev-only-token-signing-secret-not-a-real-one"
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

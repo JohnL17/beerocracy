@@ -1,5 +1,17 @@
 import Config
 
+# Local configuration — the GitHub credentials and the admin list — lives in a
+# .env file that is deliberately not checked in. See .env.example for the shape
+# of it.
+#
+# The file is merged into the real environment rather than read separately, so
+# everything below can go on asking `System.get_env/1` and does not care which
+# of the two it came from. The real environment wins every collision, and in a
+# release there is no .env at all: `source!/1` skips files that are not there.
+[".env", System.get_env()]
+|> Dotenvy.source!()
+|> System.put_env()
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -53,6 +65,40 @@ end
 
 if repo_branch = System.get_env("REPO_BRANCH") do
   config :beerocracy, :repo_branch, repo_branch
+end
+
+# Who may look behind the counter, as a comma-separated list of GitHub handles:
+# ADMIN_USERS="anehx,someone-else". Unset means nobody, which is the right
+# default for a list of people with more buttons than everybody else.
+if admins = System.get_env("ADMIN_USERS") do
+  config :beerocracy,
+    admins:
+      admins
+      |> String.split(",")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+end
+
+# The GitHub OAuth application people sign in through. Only the keys actually
+# given are set; `config/2` deep-merges keyword lists, so the rest survives.
+github_credentials =
+  [
+    client_id: System.get_env("GITHUB_CLIENT_ID"),
+    client_secret: System.get_env("GITHUB_CLIENT_SECRET")
+  ]
+  |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+if github_credentials != [] do
+  config :beerocracy, :github, github_credentials
+end
+
+# Where GitHub sends people back to: the base of the auth routes, not the
+# callback itself. Production derives it from PHX_HOST further down; everywhere
+# else it is localhost unless you say otherwise.
+if config_env() != :prod do
+  config :beerocracy,
+         :github,
+         redirect_uri: System.get_env("GITHUB_REDIRECT_URI") || "http://localhost:4000/auth"
 end
 
 if config_env() == :prod do
@@ -109,6 +155,24 @@ if config_env() == :prod do
     )
 
   config :beerocracy, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+
+  # Where GitHub sends people back to. This is the base of the auth routes, not
+  # the callback itself, and it has to match the callback URL registered on the
+  # GitHub application — which is this plus /user/github/callback.
+  config :beerocracy, :github,
+    redirect_uri:
+      %URI{scheme: scheme, host: host, port: url_port, path: "/auth"} |> URI.to_string()
+
+  # Signs the session tokens. Losing it signs everybody out; leaking it lets
+  # somebody mint a session as anybody, so it belongs in the environment with
+  # SECRET_KEY_BASE rather than in the image.
+  config :beerocracy,
+    token_signing_secret:
+      System.get_env("TOKEN_SIGNING_SECRET") ||
+        raise("""
+        environment variable TOKEN_SIGNING_SECRET is missing.
+        You can generate one by calling: mix phx.gen.secret
+        """)
 
   config :beerocracy, BeerocracyWeb.Endpoint,
     url: [host: host, port: url_port, scheme: scheme],

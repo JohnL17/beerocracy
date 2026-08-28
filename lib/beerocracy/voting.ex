@@ -11,6 +11,8 @@ defmodule Beerocracy.Voting do
     resource Beerocracy.Voting.DayVote do
       define :cast_day_vote, action: :cast
       define :day_votes_for_week, action: :for_week, args: [:week_key]
+      define :all_day_votes, action: :read
+      define :rename_day_voter, action: :rename_voter, args: [:voter_name]
       define :retract_day_vote, action: :destroy
     end
 
@@ -18,6 +20,7 @@ defmodule Beerocracy.Voting do
       define :cast_place_vote, action: :cast
       define :place_votes_for_week, action: :for_week, args: [:week_key]
       define :all_place_votes, action: :read
+      define :rename_place_voter, action: :rename_voter, args: [:voter_name]
       define :retract_place_vote, action: :destroy
     end
   end

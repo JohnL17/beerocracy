@@ -39,3 +39,6 @@ npm-debug.log
 *.db
 *.db-*
 
+
+# Local credentials and the admin list. See .env.example.
+/.env
