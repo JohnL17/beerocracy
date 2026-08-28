@@ -257,6 +257,13 @@ It changes no votes, and the ballot's own verdict stays on the sheet underneath,
 relabelled *what the vote said*. Weeks without a correction — nearly all of
 them — behave exactly as they always did.
 
+A week takes **as many places as the week actually had**. Write down one stop at
+a time: two pubs on the same evening read back as one line — *Thursday at the
+Shamrock, then McCarthy's* — and two different evenings get a line each. Writing
+the same pub down twice for the same night corrects it rather than counting it
+twice, every stop counts as "we were there recently", and **clear** on an
+archive row strikes that one stop while **back to the vote** clears the week.
+
 The swipe deck is **dealt in a different order to every voter**, so the top of
 `places.yml` does not get judged while everyone is still interested while the
 bottom gets rushed. The order is derived from your name and the week: stable

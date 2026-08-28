@@ -151,6 +151,27 @@ defmodule BeerocracyWeb.BallotLive do
     end
   end
 
+  def handle_event(
+        "clear_stop",
+        %{"week_key" => week_key, "weekday" => weekday, "slug" => slug},
+        %{assigns: assigns} = socket
+      ) do
+    with {:ok, socket} <- require_admin(socket),
+         {:ok, week} <- Ballot.week_from_key(week_key, assigns.week),
+         {:ok, weekday} <- parse_weekday(weekday),
+         {:ok, place} <- Places.fetch(slug) do
+      Minutes.forget_stop(week, weekday, place.slug)
+
+      {:noreply,
+       socket
+       |> assign_tally()
+       |> put_flash(:info, "Struck #{place.name} from week #{week.week}.")}
+    else
+      {:error, socket} -> {:noreply, socket}
+      :error -> {:noreply, socket}
+    end
+  end
+
   def handle_event("undo", _params, %{assigns: assigns} = socket) do
     with {:ok, socket} <- require_voter(socket),
          {:ok, slug} <- Ballot.undo_last_swipe(assigns.week, assigns.voter_key) do
@@ -290,7 +311,7 @@ defmodule BeerocracyWeb.BallotLive do
       outcome: outcome,
       soaking: Ballot.soaking_risk(outcome, forecasts),
       history: history,
-      recorded: Ballot.recorded_visit(assigns.week),
+      recorded: Ballot.recorded_visits(assigns.week),
       visits: Ballot.last_visits(assigns.week)
     )
   end
@@ -844,7 +865,7 @@ defmodule BeerocracyWeb.BallotLive do
   attr :outcome, :any, default: nil
   attr :soaking, :any, default: nil
   attr :history, :list, default: []
-  attr :recorded, :any, default: nil
+  attr :recorded, :list, default: []
   attr :week, Week, required: true
   attr :admin?, :boolean, default: false
 
@@ -857,7 +878,7 @@ defmodule BeerocracyWeb.BallotLive do
         )} and {@tally.place_votes_cast} swipes recorded.
       </.article_header>
 
-      <div :if={@recorded} class="mt-6 border-2 border-ink bg-ink p-5 text-paper">
+      <div :if={@recorded != []} class="mt-6 border-2 border-ink bg-ink p-5 text-paper">
         <p class="eyebrow flex items-baseline justify-between gap-3 opacity-80">
           <span>In the end</span>
           <button
@@ -870,12 +891,19 @@ defmodule BeerocracyWeb.BallotLive do
             Back to the vote
           </button>
         </p>
-        <p class="mt-2 text-2xl font-extrabold uppercase [font-stretch:80%] leading-tight sm:text-3xl">
-          {Week.label(@recorded.weekday)} at {@recorded.place.name}
-        </p>
-        <p class="data mt-2 opacity-80">
-          {Calendar.strftime(@recorded.date, "%d.%m.%Y")} · written down by {@recorded.recorded_by}
-        </p>
+        <%!-- One block per night: a week can hold an evening that moved on, and
+              a week that went out twice. --%>
+        <div
+          :for={night <- nights(@recorded)}
+          class="mt-2 border-paper/30 [&+&]:mt-4 [&+&]:border-t [&+&]:pt-4"
+        >
+          <p class="text-2xl font-extrabold uppercase [font-stretch:80%] leading-tight sm:text-3xl">
+            {Week.label(night.weekday)} at {crawl(night.places)}
+          </p>
+          <p class="data mt-2 opacity-80">
+            {Calendar.strftime(night.date, "%d.%m.%Y")} · written down by {night.recorded_by}
+          </p>
+        </div>
       </div>
 
       <div
@@ -883,7 +911,7 @@ defmodule BeerocracyWeb.BallotLive do
         class="mt-6 border-2 border-bottle bg-bottle p-5 text-paper"
       >
         <p class="eyebrow opacity-80">
-          {if @recorded, do: "What the vote said", else: "As it stands"}
+          {if @recorded != [], do: "What the vote said", else: "As it stands"}
         </p>
         <p class="mt-2 text-2xl font-extrabold uppercase [font-stretch:80%] leading-tight sm:text-3xl">
           {Week.label(@outcome.day.weekday)} at {place_names(@outcome.places)}
@@ -968,8 +996,10 @@ defmodule BeerocracyWeb.BallotLive do
         <h3 class="eyebrow mt-8 text-ink-soft">Where we went</h3>
         <p class="data mt-1 text-ink-soft">So nobody proposes the same pub four weeks running.</p>
         <ol class="mt-3 space-y-1.5">
-          <li :for={visit <- @history} class="flex items-baseline gap-3">
-            <span class="data w-16 shrink-0 font-bold">W{visit.week.week}</span>
+          <%!-- A crawl is several rows of one week, so the week number is
+                printed once and the rows below it carry on underneath. --%>
+          <li :for={{week_label, visit} <- history_rows(@history)} class="flex items-baseline gap-3">
+            <span class="data w-16 shrink-0 font-bold">{week_label}</span>
             <span class="data w-8 shrink-0 text-ink-soft">{Week.short_label(visit.weekday)}</span>
             <span class="min-w-0 flex-1 truncate">
               <span aria-hidden="true">{visit.place.emoji}</span> {visit.place.name}
@@ -984,8 +1014,10 @@ defmodule BeerocracyWeb.BallotLive do
             <button
               :if={@admin? and Ballot.Visit.recorded?(visit)}
               type="button"
-              phx-click="clear_visit"
+              phx-click="clear_stop"
               phx-value-week_key={visit.week.key}
+              phx-value-weekday={visit.weekday}
+              phx-value-slug={visit.place.slug}
               class="data shrink-0 text-ink-soft underline underline-offset-2 hover:text-ink"
             >
               clear
@@ -1030,7 +1062,9 @@ defmodule BeerocracyWeb.BallotLive do
         <p class="note mt-2">
           The ballot says where we agreed to go, which is not always where we went.
           Writing it down here corrects that week — in the archive, and in the
-          "we were there recently" note on the cards. It changes no votes.
+          "we were there recently" note on the cards. It changes no votes. One stop
+          at a time: a second place on the same night joins it rather than replacing
+          it, so an evening that moved on is written down the way it happened.
         </p>
 
         <form phx-submit="record_visit" class="mt-4 flex flex-wrap items-end gap-3">
@@ -1086,13 +1120,47 @@ defmodule BeerocracyWeb.BallotLive do
       Enum.map(history, &{&1.week.key, "W#{&1.week.week}"})
   end
 
-  defp default_weekday(%Ballot.Visit{weekday: weekday}, _outcome), do: weekday
-  defp default_weekday(nil, %{day: %{weekday: weekday}}), do: weekday
-  defp default_weekday(nil, _undecided), do: :thursday
+  # The night already being written down, so adding the second pub of an evening
+  # is one choice rather than three.
+  defp default_weekday([_ | _] = recorded, _outcome), do: List.last(recorded).weekday
+  defp default_weekday([], %{day: %{weekday: weekday}}), do: weekday
+  defp default_weekday([], _undecided), do: :thursday
 
-  defp default_slug(%Ballot.Visit{place: place}, _outcome), do: place.slug
-  defp default_slug(nil, %{places: [%{place: place} | _]}), do: place.slug
-  defp default_slug(nil, _undecided), do: nil
+  # The place is deliberately not defaulted to one already written down — that
+  # would offer a no-op. What is worth offering is the place the vote picked.
+  defp default_slug(_recorded, %{places: [%{place: place} | _]}), do: place.slug
+  defp default_slug(_recorded, _undecided), do: nil
+
+  # The stops of one week gathered into the nights they were drunk on, so an
+  # evening that moved on reads as one line rather than two.
+  defp nights(visits) do
+    visits
+    |> Enum.chunk_by(& &1.weekday)
+    |> Enum.map(fn [first | _] = stops ->
+      %{
+        weekday: first.weekday,
+        date: first.date,
+        places: Enum.map(stops, & &1.place.name),
+        recorded_by: stops |> Enum.map(& &1.recorded_by) |> Enum.uniq() |> to_sentence("and")
+      }
+    end)
+  end
+
+  defp crawl([name]), do: name
+  defp crawl(names), do: Enum.join(names, ", then ")
+
+  # The week number belongs to the week, not to each of its rows: it is printed
+  # on the first and left blank underneath, the way the place table numbers a
+  # draw once.
+  defp history_rows(visits) do
+    visits
+    |> Enum.chunk_by(& &1.week.key)
+    |> Enum.flat_map(fn [first | _] = week ->
+      Enum.with_index(week, fn visit, index ->
+        {(index == 0 && "W#{first.week.week}") || nil, visit}
+      end)
+    end)
+  end
 
   # ── Shared bits ────────────────────────────────────────────────────────────
 
@@ -1225,12 +1293,14 @@ defmodule BeerocracyWeb.BallotLive do
   defp tied_suffix([_only]), do: ""
   defp tied_suffix(places), do: ", #{length(places)} ways"
 
-  defp to_sentence([one]), do: one
-  defp to_sentence([a, b]), do: "#{a} or #{b}"
+  # Drawn places are an either/or; the admins who wrote a night down are not.
+  defp to_sentence(names, conjunction \\ "or")
+  defp to_sentence([one], _conjunction), do: one
+  defp to_sentence([a, b], conjunction), do: "#{a} #{conjunction} #{b}"
 
-  defp to_sentence(names) do
+  defp to_sentence(names, conjunction) do
     {rest, [last]} = Enum.split(names, -1)
-    "#{Enum.join(rest, ", ")} or #{last}"
+    "#{Enum.join(rest, ", ")} #{conjunction} #{last}"
   end
 
   defp maybe_suffix(%{maybe_count: 0}), do: ""

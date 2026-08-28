@@ -37,6 +37,14 @@ defmodule BeerocracyWeb.BallotMinutesLiveTest do
     view
   end
 
+  defp record(view, week, weekday, slug) do
+    render_submit(view, "record_visit", %{
+      "week_key" => week.key,
+      "weekday" => weekday,
+      "slug" => slug
+    })
+  end
+
   describe "the minutes form" do
     test "is offered to an admin", context do
       %{view: view} = admin(context)
@@ -123,7 +131,7 @@ defmodule BeerocracyWeb.BallotMinutesLiveTest do
         })
 
       assert html =~ "not a week and a place"
-      assert Ballot.recorded_visit(Week.current()) == nil
+      assert Ballot.recorded_visits(Week.current()) == []
     end
   end
 
@@ -139,7 +147,7 @@ defmodule BeerocracyWeb.BallotMinutesLiveTest do
         })
 
       assert html =~ "not yours to set"
-      assert Ballot.recorded_visit(Week.current()) == nil
+      assert Ballot.recorded_visits(Week.current()) == []
     end
 
     test "cannot clear one either", context do
@@ -149,7 +157,7 @@ defmodule BeerocracyWeb.BallotMinutesLiveTest do
       %{view: view} = ordinary(context)
       render_click(view, "clear_visit", %{"week_key" => week.key})
 
-      assert Ballot.recorded_visit(week)
+      assert Ballot.recorded_visits(week) != []
     end
   end
 
@@ -164,7 +172,75 @@ defmodule BeerocracyWeb.BallotMinutesLiveTest do
       html = render_click(view, "clear_visit", %{"week_key" => week.key})
 
       refute html =~ "In the end"
-      assert Ballot.recorded_visit(week) == nil
+      assert Ballot.recorded_visits(week) == []
+    end
+  end
+
+  describe "a night that moved on" do
+    test "reads as one line, in the order it was drunk", context do
+      %{view: view} = admin(context)
+      week = Week.current()
+
+      record(view, week, "friday", "shamrock")
+      html = record(view, week, "friday", "pickwick")
+
+      assert html =~ "Friday at The Shamrock, then Mr. Pickwick Pub"
+      assert length(Ballot.recorded_visits(week)) == 2
+    end
+
+    test "a week that went out twice gets a line each", context do
+      %{view: view} = admin(context)
+      week = Week.current()
+
+      record(view, week, "friday", "pickwick")
+      html = record(view, week, "tuesday", "shamrock")
+
+      assert html =~ "Tuesday at The Shamrock"
+      assert html =~ "Friday at Mr. Pickwick Pub"
+    end
+
+    test "one stop can be struck without taking the evening with it", context do
+      week = Week.current()
+      Minutes.record(week, :friday, "shamrock", "Jonas")
+      Minutes.record(week, :friday, "pickwick", "Jonas")
+
+      %{view: view} = admin(context)
+
+      html =
+        render_click(view, "clear_stop", %{
+          "week_key" => week.key,
+          "weekday" => "friday",
+          "slug" => "shamrock"
+        })
+
+      assert html =~ "Struck The Shamrock"
+      assert [%{place: %{slug: "pickwick"}}] = Ballot.recorded_visits(week)
+    end
+
+    test "clearing the week takes every stop", context do
+      week = Week.current()
+      Minutes.record(week, :friday, "shamrock", "Jonas")
+      Minutes.record(week, :tuesday, "pickwick", "Jonas")
+
+      %{view: view} = admin(context)
+      render_click(view, "clear_visit", %{"week_key" => week.key})
+
+      assert Ballot.recorded_visits(week) == []
+    end
+
+    test "an ordinary voter cannot strike a stop", context do
+      week = Week.current()
+      Minutes.record(week, :friday, "shamrock", "Jonas")
+
+      %{view: view} = ordinary(context)
+
+      render_click(view, "clear_stop", %{
+        "week_key" => week.key,
+        "weekday" => "friday",
+        "slug" => "shamrock"
+      })
+
+      assert Ballot.recorded_visits(week) != []
     end
   end
 

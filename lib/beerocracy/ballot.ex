@@ -462,6 +462,10 @@ defmodule Beerocracy.Ballot do
   Reads the archive that has been accumulating since week one — nothing extra is
   stored for this. Weeks that never reached a decision are skipped, as are
   winners whose slug has since left the catalogue.
+
+  `limit` counts weeks rather than rows: a week somebody wrote down as a crawl
+  is several visits but one night out, and cutting a week off halfway through
+  its own evening would read as a different night.
   """
   @spec history(Week.t(), pos_integer()) :: [Visit.t()]
   def history(%Week{} = before, limit \\ 8) do
@@ -477,26 +481,26 @@ defmodule Beerocracy.Ballot do
     |> Enum.uniq()
     |> Enum.reject(&(&1 == before.key))
     |> Enum.sort(:desc)
-    |> Enum.flat_map(&visit(&1, Map.get(voted, &1, []), Map.get(recorded, &1), before))
+    |> Enum.flat_map(&visit(&1, Map.get(voted, &1, []), Map.get(recorded, &1, []), before))
+    |> Enum.chunk_by(& &1.week.key)
     |> Enum.take(limit)
+    |> Enum.concat()
   end
 
   @doc """
-  Where an admin says we actually went this week, or `nil` for the usual case.
+  Where an admin says we actually went this week — usually nowhere, sometimes
+  one place, and sometimes a night that moved on twice.
 
   Kept apart from `outcome/1` on purpose: the outcome is what the ballot says,
   and it stays available and honest even once it has been overruled.
   """
-  @spec recorded_visit(Week.t()) :: Visit.t() | nil
-  def recorded_visit(%Week{} = week) do
+  @spec recorded_visits(Week.t()) :: [Visit.t()]
+  def recorded_visits(%Week{} = week) do
+    # Guarded rather than left to `visit_for/3`, whose empty-minutes clause
+    # answers with the vote — which is the one thing this must never do.
     case Minutes.for_week(week) do
-      nil ->
-        nil
-
-      entry ->
-        week
-        |> visit_for(Voting.place_votes_for_week!(week.key), entry)
-        |> List.first()
+      [] -> []
+      entries -> visit_for(week, Voting.place_votes_for_week!(week.key), entries)
     end
   end
 
@@ -527,27 +531,30 @@ defmodule Beerocracy.Ballot do
   end
 
   # An admin saying where we went beats the vote outright — that is the whole
-  # point of writing it down.
-  defp visit_for(week, votes, %Entry{} = entry) do
-    case Places.fetch(entry.place_slug) do
-      {:ok, place} ->
-        [
-          %Visit{
-            week: week,
-            weekday: entry.weekday,
-            date: Week.date_of(week, entry.weekday),
-            place: place,
-            likes: likes_for(week, votes, entry.place_slug),
-            recorded_by: entry.recorded_by
-          }
-        ]
+  # point of writing it down. Several stops make several visits, in the order
+  # the minutes hold them.
+  defp visit_for(week, votes, [_ | _] = entries) do
+    Enum.flat_map(entries, fn %Entry{} = entry ->
+      case Places.fetch(entry.place_slug) do
+        {:ok, place} ->
+          [
+            %Visit{
+              week: week,
+              weekday: entry.weekday,
+              date: Week.date_of(week, entry.weekday),
+              place: place,
+              likes: likes_for(week, votes, entry.place_slug),
+              recorded_by: entry.recorded_by
+            }
+          ]
 
-      :error ->
-        []
-    end
+        :error ->
+          []
+      end
+    end)
   end
 
-  defp visit_for(week, votes, nil) do
+  defp visit_for(week, votes, []) do
     with tally = tally_from(week, votes),
          %{day: day, places: [%PlaceResult{} = result | _]} <- outcome(tally) do
       [

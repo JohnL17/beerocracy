@@ -8,8 +8,10 @@ defmodule Beerocracy.Minutes.Entry do
   had a birthday. Without somewhere to write that down, the archive is a record
   of intentions, and "we were there two weeks ago" quietly stops being true.
 
-  One entry per week, at most. Weeks without one fall back to the vote, which is
-  the usual case and stays the default.
+  One entry per place per night. A week can hold several — an evening that moved
+  on after the first round is two entries on the same weekday, and a week that
+  went out twice is two entries on different ones. Weeks without any fall back
+  to the vote, which is the usual case and stays the default.
   """
 
   use Ash.Resource,
@@ -47,24 +49,28 @@ defmodule Beerocracy.Minutes.Entry do
   end
 
   identities do
-    identity :unique_week, [:week_key]
+    # A night is identified by where and when, so writing the same stop down
+    # twice corrects it instead of doubling it — but a second pub on the same
+    # evening, or the same pub on another evening, is a separate entry.
+    identity :unique_visit, [:week_key, :weekday, :place_slug]
   end
 
   actions do
     defaults [:read, :destroy]
 
     create :record do
-      description "Write down where we went. Recording again corrects it rather than erroring."
+      description "Write down one stop. Writing the same one down again is not a second round."
       accept [:week_key, :place_slug, :weekday, :recorded_by]
       upsert? true
-      upsert_identity :unique_week
-      upsert_fields [:place_slug, :weekday, :recorded_by, :updated_at]
+      upsert_identity :unique_visit
+      upsert_fields [:recorded_by, :updated_at]
     end
 
     read :for_week do
+      description "Every stop written down for one week, oldest first."
       argument :week_key, :string, allow_nil?: false
-      get? true
       filter expr(week_key == ^arg(:week_key))
+      prepare build(sort: [inserted_at: :asc])
     end
   end
 end

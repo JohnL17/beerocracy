@@ -20,6 +20,10 @@ defmodule Beerocracy.MinutesTest do
     week |> Ballot.history() |> Enum.find(&(&1.week.key == week_key))
   end
 
+  defp visits(week, week_key) do
+    week |> Ballot.history() |> Enum.filter(&(&1.week.key == week_key))
+  end
+
   describe "history with nothing recorded" do
     test "still answers with whatever the vote said", %{week: week, last_week: last_week} do
       assert %{place: place, weekday: :thursday} = visit(week, last_week.key)
@@ -102,28 +106,88 @@ defmodule Beerocracy.MinutesTest do
     end
   end
 
-  describe "recording twice" do
-    test "corrects the week rather than adding a second answer", ctx do
+  describe "a night that moved on" do
+    test "keeps every stop, in the order they were written down", ctx do
+      Minutes.record(ctx.last_week, :friday, "shamrock", "Jonas")
       Minutes.record(ctx.last_week, :friday, "pickwick", "Jonas")
-      Minutes.record(ctx.last_week, :monday, "shamrock", "Mira")
 
-      assert %{place: place, weekday: :monday, recorded_by: "Mira"} =
-               visit(ctx.week, ctx.last_week.key)
+      assert [first, second] = visits(ctx.week, ctx.last_week.key)
 
-      assert place.slug == "shamrock"
+      assert first.place.slug == "shamrock"
+      assert second.place.slug == "pickwick"
+      assert Enum.all?([first, second], &(&1.weekday == :friday))
+    end
+
+    test "takes a week that went out twice, earliest night first", ctx do
+      # Written down out of order; the minutes still read Tuesday then Friday.
+      Minutes.record(ctx.last_week, :friday, "pickwick", "Jonas")
+      Minutes.record(ctx.last_week, :tuesday, "shamrock", "Jonas")
+
+      assert [%{weekday: :tuesday}, %{weekday: :friday}] = visits(ctx.week, ctx.last_week.key)
+    end
+
+    test "writing the same stop down again corrects it rather than doubling it", ctx do
+      Minutes.record(ctx.last_week, :friday, "pickwick", "Jonas")
+      Minutes.record(ctx.last_week, :friday, "pickwick", "Mira")
+
+      assert [%{recorded_by: "Mira"}] = visits(ctx.week, ctx.last_week.key)
       assert length(Minutes.all_entries!()) == 1
+    end
+
+    test "the same pub on another night is a separate stop", ctx do
+      Minutes.record(ctx.last_week, :tuesday, "pickwick", "Jonas")
+      Minutes.record(ctx.last_week, :friday, "pickwick", "Jonas")
+
+      assert length(visits(ctx.week, ctx.last_week.key)) == 2
     end
   end
 
-  describe "recorded_visit/1" do
-    test "is nil for a week nobody has written down", %{week: week} do
-      assert Ballot.recorded_visit(week) == nil
+  describe "forget_stop/3" do
+    setup ctx do
+      Minutes.record(ctx.last_week, :friday, "shamrock", "Jonas")
+      Minutes.record(ctx.last_week, :friday, "pickwick", "Jonas")
+      ctx
+    end
+
+    test "strikes one stop and leaves the rest of the night", ctx do
+      Minutes.forget_stop(ctx.last_week, :friday, "shamrock")
+
+      assert [%{place: place}] = visits(ctx.week, ctx.last_week.key)
+      assert place.slug == "pickwick"
+    end
+
+    test "leaves an identical pub on another night alone", ctx do
+      Minutes.record(ctx.last_week, :tuesday, "shamrock", "Jonas")
+
+      Minutes.forget_stop(ctx.last_week, :friday, "shamrock")
+
+      assert [%{weekday: :tuesday, place: %{slug: "shamrock"}}, %{place: %{slug: "pickwick"}}] =
+               visits(ctx.week, ctx.last_week.key)
+    end
+
+    test "is content when there was no such stop", ctx do
+      assert Minutes.forget_stop(ctx.last_week, :monday, "mccarthys") == :ok
+      assert length(visits(ctx.week, ctx.last_week.key)) == 2
+    end
+  end
+
+  describe "recorded_visits/1" do
+    test "is empty for a week nobody has written down", %{week: week} do
+      assert Ballot.recorded_visits(week) == []
     end
 
     test "reports this week once it has been", %{week: week} do
       Minutes.record(week, :wednesday, "shamrock", "Jonas")
 
-      assert %{weekday: :wednesday, recorded_by: "Jonas"} = Ballot.recorded_visit(week)
+      assert [%{weekday: :wednesday, recorded_by: "Jonas"}] = Ballot.recorded_visits(week)
+    end
+
+    test "reports every stop of a crawl", %{week: week} do
+      Minutes.record(week, :wednesday, "shamrock", "Jonas")
+      Minutes.record(week, :wednesday, "mccarthys", "Jonas")
+
+      assert [%{place: %{slug: "shamrock"}}, %{place: %{slug: "mccarthys"}}] =
+               Ballot.recorded_visits(week)
     end
   end
 end

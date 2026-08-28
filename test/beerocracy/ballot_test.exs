@@ -5,6 +5,7 @@ defmodule Beerocracy.BallotTest do
   use Beerocracy.DataCase, async: false
 
   alias Beerocracy.Ballot
+  alias Beerocracy.Minutes
   alias Beerocracy.Places
   alias Beerocracy.Week
 
@@ -540,6 +541,31 @@ defmodule Beerocracy.BallotTest do
       Ballot.swipe(week, "Jonas", key("Jonas"), "shamrock", true)
 
       assert Ballot.history(week) == []
+    end
+
+    test "gives a crawl a row per stop, in the order it was drunk", %{week: week} do
+      past = Week.from_date(Date.add(week.monday, -7))
+      Minutes.record(past, :thursday, "shamrock", "Jonas")
+      Minutes.record(past, :thursday, "pickwick", "Jonas")
+
+      assert [first, second] = Ballot.history(week)
+
+      assert first.place.slug == "shamrock"
+      assert second.place.slug == "pickwick"
+      assert Enum.all?([first, second], &Ballot.Visit.recorded?/1)
+    end
+
+    test "counts the limit in weeks, so a crawl is not cut off halfway", %{week: week} do
+      for weeks_ago <- 1..3 do
+        past = Week.from_date(Date.add(week.monday, -7 * weeks_ago))
+        Minutes.record(past, :thursday, "shamrock", "Jonas")
+        Minutes.record(past, :thursday, "pickwick", "Jonas")
+      end
+
+      visits = Ballot.history(week, 2)
+
+      assert length(visits) == 4
+      assert visits |> Enum.map(& &1.week.key) |> Enum.uniq() |> length() == 2
     end
 
     test "skips a week that never reached a decision", %{week: week} do
