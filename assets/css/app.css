@@ -379,6 +379,30 @@
     cursor: default;
   }
 
+  /* A day that has been. It keeps its marks — the week reads as a record of
+     itself — but goes flat and greyed, and the date is struck through, so it
+     is plainly not a thing left to decide. */
+  .day-tile[data-past] {
+    border-color: var(--color-rule);
+    color: var(--color-ink-soft);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgb(0 0 0 / 0.05) 0 3px,
+      transparent 3px 7px
+    );
+    opacity: 0.55;
+  }
+
+  .day-tile[data-past] .day-tile-date {
+    text-decoration: line-through;
+  }
+
+  .day-tile[data-past] .day-tile-weather {
+    /* Yesterday's forecast is the one fact on the tile that has stopped being
+       information at all. */
+    filter: grayscale(1);
+  }
+
   /* Yes is a filled tile; maybe is the same commitment drawn in pencil. */
   .day-tile[data-stance="yes"] {
     background-color: var(--color-bottle);

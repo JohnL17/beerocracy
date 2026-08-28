@@ -12,6 +12,7 @@ defmodule BeerocracyWeb.PlaceComponents do
   alias Beerocracy.Places
   alias Beerocracy.Places.Opening
   alias Beerocracy.Places.Reach
+  alias Beerocracy.Week
 
   @doc """
   The catalogue's filename, linked to the file on GitHub.
@@ -119,7 +120,7 @@ defmodule BeerocracyWeb.PlaceComponents do
     assigns =
       assign(assigns,
         description: Opening.describe(assigns.place.opening),
-        days_left: Opening.days_left(assigns.place.opening, Date.utc_today()),
+        days_left: Opening.days_left(assigns.place.opening, Week.today()),
         restrictive?: Opening.restrictive?(assigns.place.opening)
       )
 

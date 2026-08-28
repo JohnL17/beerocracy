@@ -41,6 +41,28 @@ defmodule Beerocracy.DataCase do
   end
 
   @doc """
+  Pins the calendar for the length of one test.
+
+  The sheet closes days that have already been, so a test that taps Monday is
+  otherwise a test that only holds on a Monday. Pinning makes the day of the
+  week a fixture like any other, rather than something the suite inherits from
+  whenever it happens to run.
+  """
+  def pin_today(%Date{} = date) do
+    previous = Application.get_env(:beerocracy, :today)
+    Application.put_env(:beerocracy, :today, date)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      case previous do
+        nil -> Application.delete_env(:beerocracy, :today)
+        date -> Application.put_env(:beerocracy, :today, date)
+      end
+    end)
+
+    date
+  end
+
+  @doc """
   A helper that transforms changeset errors into a map of messages.
 
       assert {:error, changeset} = Accounts.create_user(%{password: "short"})

@@ -41,6 +41,7 @@ defmodule BeerocracyWeb.BallotLive do
      |> assign(
        page_title: "Week #{week.week}",
        week: week,
+       today: Week.today(),
        voter_name: Scope.voter_name(scope),
        voter_key: Scope.voter_key(scope),
        day_stances: %{},
@@ -73,7 +74,8 @@ defmodule BeerocracyWeb.BallotLive do
 
   def handle_event("cycle_day", %{"weekday" => weekday}, %{assigns: assigns} = socket) do
     with {:ok, socket} <- require_voter(socket),
-         {:ok, weekday} <- parse_weekday(weekday) do
+         {:ok, weekday} <- parse_weekday(weekday),
+         {:ok, socket} <- require_ahead(socket, weekday) do
       days = Ballot.cycle_day(assigns.week, assigns.voter_name, assigns.voter_key, weekday)
       {:noreply, socket |> assign(day_stances: days) |> assign_tally()}
     else
@@ -169,9 +171,11 @@ defmodule BeerocracyWeb.BallotLive do
 
   def handle_info(:tick, %{assigns: assigns} = socket) do
     week = Week.current()
+    socket = assign(socket, today: Week.today())
 
     if week.key == assigns.week.key do
-      # Same week; only the countdown in the header moved.
+      # Same week; the countdown in the header moved, and — once a day — the
+      # tile for yesterday closed itself.
       {:noreply, assign(socket, week: week)}
     else
       # A new week: the old sheet is spent, everybody starts clean.
@@ -241,6 +245,20 @@ defmodule BeerocracyWeb.BallotLive do
     {:error, put_flash(socket, :error, "That is not yours to set.")}
   end
 
+  # The tile for a day that has been disables itself, but a sheet left open over
+  # midnight is a minute behind the calendar, so the event is checked too — and
+  # against the clock now, not the one the page was rendered with.
+  defp require_ahead(%{assigns: assigns} = socket, weekday) do
+    if Week.past?(Week.date_of(assigns.week, weekday)) do
+      {:error,
+       socket
+       |> assign(today: Week.today())
+       |> put_flash(:error, "#{Week.label(weekday)} has been and gone.")}
+    else
+      {:ok, socket}
+    end
+  end
+
   # Never `String.to_atom/1` on user input; only the five days on the ballot map
   # to an atom at all.
   defp parse_weekday(value) do
@@ -308,6 +326,7 @@ defmodule BeerocracyWeb.BallotLive do
 
           <.day_section
             locked={is_nil(@voter_key)}
+            today={@today}
             days={@tally.days}
             stances={@day_stances}
             leading={@leading_day}
@@ -439,6 +458,7 @@ defmodule BeerocracyWeb.BallotLive do
   # ── Article II — the day ───────────────────────────────────────────────────
 
   attr :locked, :boolean, required: true
+  attr :today, Date, required: true
   attr :days, :list, required: true
   attr :stances, :map, required: true
   attr :leading, :any, default: nil
@@ -451,7 +471,8 @@ defmodule BeerocracyWeb.BallotLive do
       <.article_header no="II" title="Which day">
         Tap a day for yes, tap again for maybe, once more to clear it. Mark as many as
         you like — a maybe counts towards the day just like a yes, so say maybe if you
-        could be talked into it.
+        could be talked into it. Days that have already been are closed: the sheet
+        runs from today to Friday.
       </.article_header>
 
       <div :if={@weather != %{}} class="mt-5 flex items-baseline gap-2">
@@ -465,12 +486,13 @@ defmodule BeerocracyWeb.BallotLive do
           type="button"
           phx-click="cycle_day"
           phx-value-weekday={day.weekday}
-          disabled={@locked}
+          disabled={@locked or Week.past?(day.date, @today)}
           data-stance={@stances[day.weekday]}
+          data-past={Week.past?(day.date, @today) || nil}
           data-leader={(@leading && @leading.weekday == day.weekday) || nil}
           class="day-tile"
-          title={day_title(day)}
-          aria-label={"#{Week.label(day.weekday)}: #{stance_label(@stances[day.weekday])}"}
+          title={day_title(day, @today)}
+          aria-label={day_label(day, @stances[day.weekday], @today)}
         >
           <.outlook forecast={@weather[day.date]} />
           <span class="day-tile-label">{Week.short_label(day.weekday)}</span>
@@ -1154,6 +1176,16 @@ defmodule BeerocracyWeb.BallotLive do
   defp stance_label(:maybe), do: "Maybe"
   defp stance_label(nil), do: "—"
 
+  # On a tile the day may already be spent, which is the first thing to say
+  # about it — the tally rows below use the plain version.
+  defp day_title(day, today) do
+    cond do
+      not Week.past?(day.date, today) -> day_title(day)
+      day.count == 0 -> "Been and gone"
+      true -> "Been and gone · #{day_title(day)}"
+    end
+  end
+
   defp day_title(%{count: 0}), do: "Nobody yet"
 
   defp day_title(day) do
@@ -1163,6 +1195,19 @@ defmodule BeerocracyWeb.BallotLive do
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" · ")
+  end
+
+  defp day_label(day, stance, today) do
+    cond do
+      not Week.past?(day.date, today) ->
+        "#{Week.label(day.weekday)}: #{stance_label(stance)}"
+
+      is_nil(stance) ->
+        "#{Week.label(day.weekday)}: been and gone, closed to voting"
+
+      true ->
+        "#{Week.label(day.weekday)}: been and gone, your answer was #{stance_label(stance)}"
+    end
   end
 
   defp place_names(places), do: places |> Enum.map(& &1.place.name) |> to_sentence()

@@ -28,6 +28,7 @@ defmodule BeerocracyWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import BeerocracyWeb.ConnCase
+      import Beerocracy.DataCase, only: [pin_today: 1]
     end
   end
 

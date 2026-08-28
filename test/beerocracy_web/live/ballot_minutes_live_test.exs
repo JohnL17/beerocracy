@@ -7,6 +7,12 @@ defmodule BeerocracyWeb.BallotMinutesLiveTest do
   alias Beerocracy.Minutes
   alias Beerocracy.Week
 
+  # The tiles for days that have been are closed, so the week is pinned open at
+  # its Monday and every weekday is still a day somebody could vote for.
+  setup do
+    %{today: pin_today(Week.current().monday)}
+  end
+
   defp admin(context) do
     previous = Application.get_env(:beerocracy, :admins)
     Application.put_env(:beerocracy, :admins, ["anehx"])

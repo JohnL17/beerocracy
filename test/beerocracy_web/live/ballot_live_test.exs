@@ -6,10 +6,17 @@ defmodule BeerocracyWeb.BallotLiveTest do
 
   import Phoenix.LiveViewTest
 
+  alias Beerocracy.Accounts.User
   alias Beerocracy.Ballot
   alias Beerocracy.Places
   alias Beerocracy.Places.Reach
   alias Beerocracy.Week
+
+  # Every day of the week is still ahead, so a test can tap whichever one makes
+  # its point. The days that have been are closed, and get their own block.
+  setup do
+    %{today: pin_today(Week.current().monday)}
+  end
 
   describe "the sheet" do
     test "shows the current week number and the date range", %{conn: conn} do
@@ -168,6 +175,54 @@ defmodule BeerocracyWeb.BallotLiveTest do
       render_click(view, "cycle_day", %{"weekday" => "caturday"})
 
       assert Ballot.tally(Week.current()).day_votes_cast == 0
+    end
+  end
+
+  describe "days that have already been" do
+    setup context do
+      # Midweek: Monday and Tuesday are spent, Wednesday is tonight.
+      today = pin_today(Date.add(Week.current().monday, 2))
+      Map.put(signed_in(context), :today, today)
+    end
+
+    test "are closed on the sheet", %{view: view} do
+      for weekday <- [:monday, :tuesday] do
+        assert view
+               |> element("button[phx-value-weekday=#{weekday}][data-past]")
+               |> has_element?()
+
+        assert view |> element("button[phx-value-weekday=#{weekday}][disabled]") |> has_element?()
+      end
+    end
+
+    test "leave today and the rest of the week open", %{view: view} do
+      for weekday <- [:wednesday, :thursday, :friday] do
+        refute view
+               |> element("button[phx-value-weekday=#{weekday}][data-past]")
+               |> has_element?()
+
+        assert tap_day(view, weekday)
+        assert stance(view, weekday) == "yes"
+      end
+    end
+
+    test "take no vote from an event sent without the button", %{view: view} do
+      assert render_click(view, "cycle_day", %{"weekday" => "monday"}) =~
+               "Monday has been and gone"
+
+      assert stance(view, :monday) == nil
+      assert Ballot.tally(Week.current()).day_votes_cast == 0
+    end
+
+    test "keep the marks made while they were still ahead", %{conn: conn, user: user} do
+      # Marked on Monday morning; the sheet is being read on Wednesday.
+      Ballot.set_day(Week.current(), "Jonas", User.voter_key(user), :monday, :yes)
+
+      {:ok, view, _html} = live(conn, ~p"/")
+
+      assert stance(view, :monday) == "yes"
+      assert view |> element("button[phx-value-weekday=monday][data-past]") |> has_element?()
+      assert Ballot.tally(Week.current()).day_votes_cast == 1
     end
   end
 

@@ -31,7 +31,7 @@ defmodule Beerocracy.Places.Opening do
   at the end of the month is a constraint, and the two should not look alike.
   """
   @spec restrictive?(t(), Date.t()) :: boolean()
-  def restrictive?(%__MODULE__{} = opening, today \\ Date.utc_today()) do
+  def restrictive?(%__MODULE__{} = opening, today \\ Week.today()) do
     not is_nil(opening.days) or
       (not is_nil(opening.season_until) and days_left(opening, today) <= 21) or
       upcoming?(opening, today)

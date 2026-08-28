@@ -1,7 +1,38 @@
 defmodule Beerocracy.WeekTest do
-  use ExUnit.Case, async: true
+  # Not async: pinning the calendar goes through `Application.put_env/3`, which
+  # is global. Anything reading the date concurrently would find itself in the
+  # week this file borrowed.
+  use ExUnit.Case, async: false
 
   alias Beerocracy.Week
+
+  describe "past?/2" do
+    test "a day earlier in the week has been and gone" do
+      assert Week.past?(~D[2026-08-17], ~D[2026-08-19])
+    end
+
+    test "today is not past — the beer is in the evening" do
+      refute Week.past?(~D[2026-08-19], ~D[2026-08-19])
+    end
+
+    test "the rest of the week is still to come" do
+      refute Week.past?(~D[2026-08-21], ~D[2026-08-19])
+    end
+  end
+
+  describe "today/0" do
+    test "is the real date when nothing is pinned" do
+      assert Week.today() == Date.utc_today()
+    end
+
+    test "is whatever the calendar is pinned to" do
+      Application.put_env(:beerocracy, :today, ~D[2026-08-19])
+      on_exit(fn -> Application.delete_env(:beerocracy, :today) end)
+
+      assert Week.today() == ~D[2026-08-19]
+      assert Week.current().key == "2026-W34"
+    end
+  end
 
   describe "from_date/1" do
     test "keys a week by its ISO year and week number" do

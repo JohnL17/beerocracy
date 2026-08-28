@@ -51,9 +51,23 @@ defmodule Beerocracy.Week do
     weekday |> Atom.to_string() |> String.capitalize()
   end
 
+  @doc """
+  Today, as far as the ballot is concerned.
+
+  Every decision that turns on the date reads the calendar through here rather
+  than calling `Date.utc_today/0` for itself. In production that is all it is;
+  the indirection exists so a test can pin the sheet to a Tuesday and check
+  that Monday has closed, which is otherwise unwritable — the day the suite
+  happens to run on is not a fixture.
+  """
+  @spec today() :: Date.t()
+  def today do
+    Application.get_env(:beerocracy, :today) || Date.utc_today()
+  end
+
   @doc "The week that today falls into."
   @spec current(Date.t()) :: t()
-  def current(today \\ Date.utc_today()) do
+  def current(today \\ today()) do
     from_date(today)
   end
 
@@ -77,6 +91,16 @@ defmodule Beerocracy.Week do
   def date_of(%__MODULE__{monday: monday}, weekday) do
     Date.add(monday, Enum.find_index(@weekdays, &(&1 == weekday)) || 0)
   end
+
+  @doc """
+  Whether `date` has already been and gone.
+
+  A day nobody can still turn up to is a day nobody gets to vote for: the sheet
+  runs from today to Sunday, and the earlier half of the week is read-only.
+  Today itself is never past — the beer is in the evening.
+  """
+  @spec past?(Date.t(), Date.t()) :: boolean()
+  def past?(date, today \\ today()), do: Date.before?(date, today)
 
   @doc "Seconds remaining until this week's ballot closes and the tally resets."
   @spec seconds_until_reset(t(), DateTime.t()) :: non_neg_integer()

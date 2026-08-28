@@ -10,6 +10,12 @@ defmodule BeerocracyWeb.BallotWeatherLiveTest do
   alias Beerocracy.Weather.Forecast
   alias Beerocracy.Week
 
+  # The tiles for days that have been are closed, so the week is pinned open at
+  # its Monday and every weekday is still a day somebody could vote for.
+  setup do
+    %{today: pin_today(Week.current().monday)}
+  end
+
   describe "the outlook above each weekday" do
     test "prints the forecast above each weekday", %{conn: conn} do
       week = Week.current()
