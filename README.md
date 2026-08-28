@@ -118,6 +118,17 @@ $ mix beerocracy.migrate_voters jonas=anehx mira=miradev
 $ mix beerocracy.migrate_voters jonas=anehx mira=miradev --commit
 ```
 
+**In the container there is no Mix**, so the same thing is `bin/voters`, which
+takes exactly the same arguments:
+
+```console
+$ docker compose exec beerocracy bin/voters --list
+$ docker compose exec beerocracy bin/voters jonas=anehx --commit
+```
+
+It exits non-zero if any handle fails to resolve, and writes nothing at all in
+that case — so a batch either lands whole or not at all.
+
 Nothing is written without `--commit`, and **nobody has to have signed in
 first**. A handle already on the sheet is resolved locally; anybody else is
 looked up against GitHub's public user endpoint, since an account id is public

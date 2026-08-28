@@ -3,6 +3,7 @@ defmodule Beerocracy.MigrateVotersTest do
 
   import ExUnit.CaptureIO
 
+  alias Beerocracy.Accounts.Adoption
   alias Beerocracy.Accounts.User
   alias Beerocracy.AccountsFixtures
   alias Beerocracy.GitHubDirectoryStub
@@ -29,6 +30,42 @@ defmodule Beerocracy.MigrateVotersTest do
     |> Enum.map(& &1.voter_key)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  # The container ships a release, which has no Mix in it: the release calls
+  # Adoption directly, so it must never reach for Mix to report or to fail.
+  describe "the release-facing API" do
+    test "lists without Mix" do
+      assert Adoption.listing() =~ "1 voter(s) with no account"
+    end
+
+    test "reports orphans as data, not as printed text" do
+      assert [%{key: "jonas", name: "Jonas", votes: 2, weeks: ["2026-W35"]}] =
+               Adoption.orphans() |> Enum.map(&%{&1 | weeks: &1.weeks})
+    end
+
+    test "returns a tagged tuple instead of raising on a bad handle" do
+      assert {:error, message} = Adoption.migrate(["jonas=ghost"], commit: true)
+      assert message =~ "no such GitHub account"
+    end
+
+    test "returns a tagged tuple instead of raising on a malformed pair" do
+      assert {:error, message} = Adoption.migrate(["nonsense"], commit: true)
+      assert message =~ "expected old_key=github_handle"
+    end
+
+    test "reports what it moved", %{user: user} do
+      assert {:ok, %{moved: 2, dropped: 0, report: report}} =
+               Adoption.migrate(["jonas=anehx"], commit: true)
+
+      assert report =~ "2 vote(s) adopted"
+      assert keys() == [User.voter_key(user)]
+    end
+
+    test "defaults to a dry run when no options are given" do
+      assert {:ok, %{moved: 2}} = Adoption.migrate(["jonas=anehx"])
+      assert keys() == ["jonas"]
+    end
   end
 
   describe "the report" do
@@ -182,6 +219,16 @@ defmodule Beerocracy.MigrateVotersTest do
       run(["jonas=anehx", "--offline", "--commit"])
 
       assert keys() == [User.voter_key(user)]
+    end
+
+    test "a batch that fails partway through writes nothing", %{user: user} do
+      # anehx resolves; the second handle does not, so neither is applied.
+      GitHubDirectoryStub.knows("newcomer", 424_242, "New Comer")
+
+      assert {:error, _} = Adoption.migrate(["jonas=anehx", "mira=ghost"], commit: true)
+
+      refute User.voter_key(user) in keys()
+      assert keys() == ["jonas"]
     end
 
     test "nothing is written when one handle in a batch fails" do
