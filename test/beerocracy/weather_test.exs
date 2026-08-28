@@ -63,7 +63,7 @@ defmodule Beerocracy.WeatherTest do
       week = Week.current()
       forecasts = Weather.for_week(week)
 
-      assert map_size(forecasts) == 5
+      assert map_size(forecasts) == length(Week.weekdays())
 
       for {_date, forecast} <- forecasts do
         assert %Forecast{} = forecast

@@ -50,7 +50,7 @@ defmodule Beerocracy.Places.Opening do
 
   def unrestricted?(%__MODULE__{}), do: false
 
-  @doc "The weekdays this place opens, in MO-FR order."
+  @doc "The days this place opens, in MO-SA order."
   @spec days(t()) :: [atom()]
   def days(%__MODULE__{days: nil}), do: Week.weekdays()
   def days(%__MODULE__{days: days}), do: Enum.filter(Week.weekdays(), &MapSet.member?(days, &1))

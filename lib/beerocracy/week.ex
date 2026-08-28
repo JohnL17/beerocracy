@@ -18,7 +18,7 @@ defmodule Beerocracy.Week do
           sunday: Date.t()
         }
 
-  @weekdays [:monday, :tuesday, :wednesday, :thursday, :friday]
+  @weekdays [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday]
 
   @doc """
   The hours a beer actually happens in, as `{from, to}` in local time.
@@ -33,7 +33,7 @@ defmodule Beerocracy.Week do
     {Keyword.get(config, :from, 16), Keyword.get(config, :to, 22)}
   end
 
-  @doc "The five candidate weekdays, MO through FR."
+  @doc "The six candidate days, MO through SA. Sunday is not on the ballot."
   @spec weekdays() :: [atom()]
   def weekdays, do: @weekdays
 
@@ -44,6 +44,7 @@ defmodule Beerocracy.Week do
   def short_label(:wednesday), do: "WE"
   def short_label(:thursday), do: "TH"
   def short_label(:friday), do: "FR"
+  def short_label(:saturday), do: "SA"
 
   @doc "Full weekday name, e.g. `\"Wednesday\"`."
   @spec label(atom()) :: String.t()

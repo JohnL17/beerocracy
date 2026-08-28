@@ -362,7 +362,7 @@
     flex-direction: column;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.75rem 0.25rem 0.6rem;
+    padding: 0.7rem 0.15rem 0.55rem;
     background-color: var(--color-card);
     border: 2px solid var(--color-ink);
     cursor: pointer;
@@ -422,14 +422,14 @@
   }
 
   /* The outlook, printed above the day like a weather column in a newspaper.
-     Always occupies its line, forecast or not, so the five tiles stay level. */
+     Always occupies its line, forecast or not, so the six tiles stay level. */
   .day-tile-weather {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 0.15rem;
-    /* Holds its height with or without a forecast, so the five tiles stay
+    /* Holds its height with or without a forecast, so the six tiles stay
        level even when the API has no answer for one of the days. */
     min-height: 4.75rem;
     line-height: 1;
@@ -440,13 +440,13 @@
   }
 
   .day-tile-sky {
-    font-size: clamp(1.375rem, 6.5vw, 2rem);
+    font-size: clamp(1.125rem, 5.4vw, 1.75rem);
     line-height: 1;
   }
 
   .day-tile-temp {
     font-family: var(--font-mono);
-    font-size: clamp(0.8125rem, 3.6vw, 1.0625rem);
+    font-size: clamp(0.6875rem, 3vw, 1rem);
     font-weight: 700;
     letter-spacing: -0.01em;
   }
@@ -459,7 +459,7 @@
        it gets a little air rather than sitting in the same tight stack. */
     margin-top: 0.25rem;
     font-family: var(--font-mono);
-    font-size: clamp(0.5625rem, 2.5vw, 0.6875rem);
+    font-size: clamp(0.5rem, 2.1vw, 0.6875rem);
     line-height: 1.15;
     letter-spacing: -0.02em;
     text-align: center;
@@ -487,14 +487,15 @@
   .day-tile-label {
     font-weight: 900;
     font-stretch: 74%;
-    font-size: clamp(1.125rem, 5vw, 1.5rem);
+    font-size: clamp(1rem, 4.2vw, 1.375rem);
     line-height: 1;
     letter-spacing: 0.02em;
   }
 
   .day-tile-date {
     font-family: var(--font-mono);
-    font-size: 0.6875rem;
+    font-size: clamp(0.5625rem, 2.4vw, 0.6875rem);
+    white-space: nowrap;
     letter-spacing: 0.06em;
     opacity: 0.7;
   }
@@ -502,11 +503,12 @@
   /* The voter's own answer, spelled out so the three states are never a guess. */
   .day-tile-stance {
     font-family: var(--font-mono);
-    font-size: 0.6875rem;
+    font-size: clamp(0.5625rem, 2.4vw, 0.6875rem);
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    padding: 0.1rem 0.35rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    padding: 0.1rem 0.25rem;
     border: 1px solid currentColor;
     opacity: 0.85;
   }
@@ -524,13 +526,16 @@
 
   .day-tile-count {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: clamp(0.625rem, 2.6vw, 0.75rem);
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     border-top: 1px solid currentColor;
     padding-top: 0.3rem;
     width: 100%;
     text-align: center;
+    /* A busy day's marks run past the tile rather than stretching the row of
+       six; the number they stand for is in the tooltip either way. */
+    overflow: hidden;
     opacity: 0.75;
   }
 

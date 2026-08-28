@@ -472,7 +472,7 @@ defmodule BeerocracyWeb.BallotLive do
         Tap a day for yes, tap again for maybe, once more to clear it. Mark as many as
         you like — a maybe counts towards the day just like a yes, so say maybe if you
         could be talked into it. Days that have already been are closed: the sheet
-        runs from today to Friday.
+        runs from today to Saturday.
       </.article_header>
 
       <div :if={@weather != %{}} class="mt-5 flex items-baseline gap-2">
@@ -480,7 +480,7 @@ defmodule BeerocracyWeb.BallotLive do
         <span class="h-px flex-1 bg-rule"></span>
       </div>
 
-      <div class="mt-3 grid grid-cols-5 gap-1.5 sm:gap-3">
+      <div class="mt-3 grid grid-cols-6 gap-1 sm:gap-2.5">
         <button
           :for={day <- @days}
           type="button"

@@ -104,7 +104,7 @@ defmodule Beerocracy.Ballot do
   def subscribe(week), do: Phoenix.PubSub.subscribe(@pubsub, topic(week))
 
   @doc """
-  The full tally for a week: weekdays in MO-FR order, places ranked best first.
+  The full tally for a week: days in MO-SA order, places ranked best first.
   """
   @spec tally(Week.t()) :: Tally.t()
   def tally(%Week{} = week) do
@@ -343,8 +343,9 @@ defmodule Beerocracy.Ballot do
 
     1. the most people, counting a maybe the same as a yes — a body is a body;
     2. the fewest maybes, so the firmer commitment wins a level total;
-    3. the day nearest the weekend, because Friday beats Monday and an argument
-       about which is exactly the thing that stops a beer from happening.
+    3. the day nearest the weekend — Saturday, then Friday, down to Monday —
+       because an argument about which is exactly the thing that stops a beer
+       from happening.
 
   The third step always separates them, so a day is never left undecided.
   """

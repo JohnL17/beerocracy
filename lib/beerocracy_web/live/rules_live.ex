@@ -60,7 +60,8 @@ defmodule BeerocracyWeb.RulesLive do
 
           <section class="sheet-section">
             <.article_header no="II" title="Days">
-              Tapping a day cycles it: yes, maybe, then nothing.
+              The ballot runs Monday to Saturday. Tapping a day cycles it: yes, maybe,
+              then nothing.
             </.article_header>
 
             <ul class="note mt-4 space-y-2">
@@ -76,8 +77,8 @@ defmodule BeerocracyWeb.RulesLive do
               <li>
                 <span class="font-bold text-ink">Ties go to certainty, then to the weekend.</span>
                 Two days level on total: the one with fewer maybes wins. Still level: the day
-                nearer the weekend, so Friday beats Monday. That always separates them, so the
-                day is never left undecided.
+                nearer the weekend, so Friday beats Monday and Saturday beats both. That
+                always separates them, so the day is never left undecided.
               </li>
             </ul>
           </section>

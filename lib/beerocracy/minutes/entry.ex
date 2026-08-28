@@ -35,7 +35,7 @@ defmodule Beerocracy.Minutes.Entry do
     attribute :weekday, :atom,
       allow_nil?: false,
       public?: true,
-      constraints: [one_of: [:monday, :tuesday, :wednesday, :thursday, :friday]]
+      constraints: [one_of: [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday]]
 
     attribute :recorded_by, :string,
       allow_nil?: false,

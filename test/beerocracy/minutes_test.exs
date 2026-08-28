@@ -35,6 +35,13 @@ defmodule Beerocracy.MinutesTest do
       assert place.slug == "pickwick"
     end
 
+    test "takes a Saturday, which is on the ballot like any other day", ctx do
+      Minutes.record(ctx.last_week, :saturday, "pickwick", "Jonas")
+
+      assert %{weekday: :saturday, date: date} = visit(ctx.week, ctx.last_week.key)
+      assert date == Date.add(ctx.last_week.monday, 5)
+    end
+
     test "says whose word it is", ctx do
       Minutes.record(ctx.last_week, :friday, "pickwick", "Jonas")
 

@@ -37,7 +37,7 @@ that anyone can review:
       walk: 9 # give both and the card leads with whichever is
       transit: 5 # quicker, and notes the other underneath
   open: # optional — when the place is open at all
-    days: [thursday, friday] # default: all five weekdays
+    days: [thursday, friday] # default: all six days, Monday to Saturday
     from: "17:00"
     to: "20:00"
   season: # optional — for pop-ups and summer bars

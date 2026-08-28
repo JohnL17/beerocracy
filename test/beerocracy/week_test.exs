@@ -95,9 +95,13 @@ defmodule Beerocracy.WeekTest do
     end
   end
 
-  test "offers Monday through Friday, in order" do
-    assert Week.weekdays() == [:monday, :tuesday, :wednesday, :thursday, :friday]
-    assert Enum.map(Week.weekdays(), &Week.short_label/1) == ~w(MO TU WE TH FR)
+  test "offers Monday through Saturday, in order" do
+    assert Week.weekdays() == [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday]
+    assert Enum.map(Week.weekdays(), &Week.short_label/1) == ~w(MO TU WE TH FR SA)
     assert Week.label(:wednesday) == "Wednesday"
+  end
+
+  test "leaves Sunday off the ballot" do
+    refute :sunday in Week.weekdays()
   end
 end

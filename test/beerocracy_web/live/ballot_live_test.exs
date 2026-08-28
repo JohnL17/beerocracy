@@ -162,12 +162,19 @@ defmodule BeerocracyWeb.BallotLiveTest do
       assert view |> element("button[phx-value-weekday=monday]") |> render() =~ "Maybe"
     end
 
-    test "offers Monday through Friday and nothing else", %{view: view} do
+    test "takes a vote for Saturday", %{view: view} do
+      tap_day(view, :saturday)
+
+      assert stance(view, :saturday) == "yes"
+      assert view |> element("button[phx-value-weekday=saturday][data-leader]") |> has_element?()
+    end
+
+    test "offers Monday through Saturday and nothing else", %{view: view} do
       for weekday <- Week.weekdays() do
         assert view |> element("button[phx-value-weekday=#{weekday}]") |> has_element?()
       end
 
-      refute view |> element("button[phx-value-weekday=saturday]") |> has_element?()
+      assert view |> element("button[phx-value-weekday=saturday]") |> has_element?()
       refute view |> element("button[phx-value-weekday=sunday]") |> has_element?()
     end
 

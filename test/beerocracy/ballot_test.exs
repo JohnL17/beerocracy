@@ -29,6 +29,15 @@ defmodule Beerocracy.BallotTest do
       assert days == %{tuesday: :yes, thursday: :maybe}
     end
 
+    test "takes a vote for Saturday like any other day", %{week: week} do
+      assert Ballot.cycle_day(week, "Jonas", key("Jonas"), :saturday) == %{saturday: :yes}
+
+      result = Ballot.tally(week) |> day(:saturday)
+
+      assert result.count == 1
+      assert result.date == Date.add(week.monday, 5)
+    end
+
     test "counts each voter once per day", %{week: week} do
       Ballot.set_day(week, "Jonas", key("Jonas"), :monday, :yes)
       Ballot.set_day(week, "Mira", key("Mira"), :monday, :maybe)
@@ -286,6 +295,13 @@ defmodule Beerocracy.BallotTest do
       assert Ballot.winning_day(Ballot.tally(week)).weekday == :friday
     end
 
+    test "breaks a level tie towards Saturday, the latest day on the ballot", %{week: week} do
+      Ballot.set_day(week, "Jonas", key("Jonas"), :friday, :yes)
+      Ballot.set_day(week, "Mira", key("Mira"), :saturday, :yes)
+
+      assert Ballot.winning_day(Ballot.tally(week)).weekday == :saturday
+    end
+
     test "prefers the day with fewer maybes before reaching for the weekend", %{week: week} do
       # Friday is later but softer; Tuesday's firm yes should take it.
       Ballot.set_day(week, "Jonas", key("Jonas"), :tuesday, :yes)
@@ -494,7 +510,7 @@ defmodule Beerocracy.BallotTest do
     test "names the weekdays a place cannot host", %{week: week} do
       {:ok, bierfenster} = Places.fetch("bierfenster")
 
-      assert Ballot.closed_days(bierfenster, week) == [:monday, :tuesday, :wednesday]
+      assert Ballot.closed_days(bierfenster, week) == [:monday, :tuesday, :wednesday, :saturday]
     end
 
     test "is empty for a place open all week", %{week: week} do

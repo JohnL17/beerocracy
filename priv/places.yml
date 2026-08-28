@@ -24,7 +24,7 @@
 #            is quicker and notes the other. A bare number means walking, so
 #            `office: 5` and `office: {walk: 5}` are the same thing.
 #   open     Optional. When the place is open at all:
-#              days: [thursday, friday]   which weekdays (default: all five)
+#              days: [thursday, friday]   which days (default: all six, MO-SA)
 #              from: "17:00"              opens (default: whenever)
 #              to:   "20:00"              last orders (default: whenever)
 #            Past midnight is fine: `to: "00:30"` means half past midnight.
@@ -200,7 +200,7 @@ places:
     season:
       from: 2026-06-12
       until: 2026-08-30
-    # Which weekdays it opens is not published anywhere; assumed all five.
+    # Which days it opens is not published anywhere; assumed all six.
     outdoor: true
     tags:
       - terrace

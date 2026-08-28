@@ -26,7 +26,7 @@ defmodule Beerocracy.Voting.DayVote do
     attribute :weekday, :atom,
       allow_nil?: false,
       public?: true,
-      constraints: [one_of: [:monday, :tuesday, :wednesday, :thursday, :friday]]
+      constraints: [one_of: [:monday, :tuesday, :wednesday, :thursday, :friday, :saturday]]
 
     attribute :stance, :atom,
       allow_nil?: false,
