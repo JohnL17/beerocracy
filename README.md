@@ -101,7 +101,32 @@ Useful commands:
 $ mix test                        # the suite
 $ mix precommit                   # compile without warnings, format, test
 $ mix beerocracy.check_places      # validate priv/places.yml
+$ mix beerocracy.migrate_voters --list   # who still has votes with no account
 ```
+
+### Votes from before the login
+
+A voter used to be whatever name they typed, normalised — `jonas`. Now they are
+their GitHub account — `gh:1234`. Votes cast under the old scheme belong to
+nobody. Run the task with `--list` (or no arguments at all) to see who is still
+unmigrated and what it would guess for each, then map the old keys onto
+handles:
+
+```console
+$ mix beerocracy.migrate_voters --list
+$ mix beerocracy.migrate_voters jonas=anehx mira=miradev
+$ mix beerocracy.migrate_voters jonas=anehx mira=miradev --commit
+```
+
+Nothing is written without `--commit`. Everyone being mapped has to have signed
+in at least once, since that is what creates the account to file the votes
+under — so the usual order is: deploy, let people sign in, then migrate.
+
+This only matters for a week that is **still open**. A closed week reads back
+correctly whatever its votes are keyed on, because the archive is computed per
+week rather than per person. The cost of leaving it is that somebody who voted
+before signing in votes again afterwards and is counted twice — which is why it
+is worth doing before the ballot fills up on a Monday.
 
 ## Deploying
 

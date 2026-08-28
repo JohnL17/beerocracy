@@ -54,6 +54,18 @@ defmodule Beerocracy.Voting.PlaceVote do
       accept [:voter_name]
     end
 
+    update :reassign do
+      description """
+      Move this vote to a different voter key.
+
+      For adopting votes cast before their owner had an account to file them
+      under; see `mix beerocracy.migrate_voters`. Not something the ballot ever
+      does on its own — a vote changing hands is an administrative act.
+      """
+
+      accept [:voter_key, :voter_name]
+    end
+
     read :for_week do
       argument :week_key, :string, allow_nil?: false
       filter expr(week_key == ^arg(:week_key))
